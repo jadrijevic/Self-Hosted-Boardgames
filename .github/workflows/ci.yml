@@ -30,6 +30,26 @@ jobs:
           shellcheck -x deploy/*.sh test/stubs/*
           ! grep -rlI $'\r' deploy test/stubs
 
+  # Layouten i en riktig webbläsare: varje uppdrag i varje steg på storbild, mobil och värdsida.
+  # Typsnittet följer med appen, så måtten är desamma här som på skärmarna hemma.
+  layout:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python tools/layoutcheck/check.py
+
   # En pull request bygger avbilden och provar den som i drift: en trasig avbild ska inte nå main,
   # eftersom servern hämtar den nya avbilden inom en timme efter en merge.
   image-check:
@@ -79,7 +99,7 @@ jobs:
         run: docker logs prov || true
 
   image:
-    needs: test
+    needs: [test, layout]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

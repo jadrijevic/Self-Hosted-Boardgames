@@ -56,6 +56,7 @@ Storbilden är en vanlig webbsida. Den visas från en dator med webbläsaren i h
 
 - Minsta text är 3,5 % av bildhöjden. Den går att läsa när bilden är minst 15 tum per meter till den som sitter längst bort: 61 tum på 4 meter, 76 tum på 5 meter.
 - Layouten är provad i 16:9 och 16:10, med upp till sex lag och lagnamn på 14 tecken.
+- Typsnittet (Inter, `public/inter.woff2`) följer med appen. Sidorna ser därför likadana ut på alla skärmar, och layouten som provas är den som visas.
 - Saknas storbild räcker mobilerna. Husets röst finns bara på storbilden.
 
 ## Köra på Unraid
@@ -114,7 +115,7 @@ Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, heml
 
 Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart.
 
-Layouten provas för sig i en riktig webbläsare. Kontrollen ritar varje uppdrag i varje steg, plus de trängsta fallen med sex lag, och mäter att inget hamnar utanför bilden och att ingen text på storbilden är för liten. Den kräver Python med Playwright och Chrome eller Chromium:
+Layouten provas för sig i en riktig webbläsare, och av CI på varje pull request. Kontrollen ritar varje uppdrag i varje steg, plus de trängsta fallen med sex lag, och mäter att inget hamnar utanför bilden, att ingen text på storbilden är för liten och att typsnittet som följer med appen är laddat. Lokalt kräver den Python med Playwright och Chrome eller Chromium:
 
 ```
 python3 tools/layoutcheck/check.py
