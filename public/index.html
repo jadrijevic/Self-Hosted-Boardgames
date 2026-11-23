@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBF6EE">
+<title>Syna</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="player">
+<main id="app"><p class="wait">Ansluter …</p></main>
+<div id="conn" hidden>Ingen kontakt med servern. Försöker igen …</div>
+<script type="module">
+import { connect, esc, keepAwake } from '/common.js';
+
+const app = document.getElementById('app');
+const conn = document.getElementById('conn');
+let state = null;
+
+const link = connect('player', {
+  onState(s) { state = s; render(); },
+  onStatus(ok) { conn.hidden = ok; },
+});
+
+function phones(team) {
+  const n = team.devices.length;
+  if (n === 0) return 'ingen mobil ännu';
+  return n === 1 ? '1 mobil ansluten' : `${n} mobiler anslutna`;
+}
+
+function render() {
+  const me = state?.me;
+  if (!me) { app.innerHTML = '<p class="wait">Ansluter …</p>'; return; }
+  if (!me.role) {
+    app.innerHTML = `
+      <h1>Vilka är ni?</h1>
+      <p class="hint">En mobil per lag räcker. Övriga kan vara publik.</p>
+      <div class="teams">${state.teams.map((t) => `
+        <button class="big" style="--c:${esc(t.color)}" data-do="choose" data-role="team" data-team="${esc(t.id)}">
+          Lag ${esc(t.name)}<small>${phones(t)}</small>
+        </button>`).join('')}
+      </div>
+      <div class="others">
+        <button data-do="choose" data-role="audience">Jag är publik</button>
+        <button data-do="choose" data-role="judge">Jag är kontrollant</button>
+      </div>`;
+    return;
+  }
+  const team = state.teams.find((t) => t.id === me.team);
+  const who = me.role === 'team' ? `Lag ${esc(team?.name)}` : me.role === 'judge' ? 'Kontrollant' : 'Publik';
+  app.innerHTML = `
+    <section class="seat" style="--c:${esc(team?.color ?? '#1B2430')}">
+      <div class="tag">Du är med som</div>
+      <div class="who">${who}</div>
+      <p>Titta på tv:n. Spelet börjar när värden startar.</p>
+    </section>
+    <button class="link" data-do="leave">Byt lag eller roll</button>`;
+}
+
+app.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-do]');
+  if (!b) return;
+  if (b.dataset.do === 'choose') {
+    link.send({ t: 'choose', role: b.dataset.role, team: b.dataset.team });
+    keepAwake();
+  } else if (b.dataset.do === 'leave') {
+    link.send({ t: 'leave' });
+  }
+});
+</script>
+</body>
+</html>

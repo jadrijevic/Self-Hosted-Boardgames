@@ -1,0 +1,57 @@
+:root{--bg:#FBF6EE;--ink:#1B2430;--muted:#5F6B7A;--line:#E3D9C8;--red:#E4572E;--green:#3FA773}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+h1{margin:0;font-size:2rem;font-weight:800;letter-spacing:-.02em}
+
+/* ---- mobil ---- */
+.player main{min-height:100dvh;display:flex;flex-direction:column;gap:14px;padding:24px 18px calc(24px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+.hint{margin:0 0 6px;color:var(--muted);font-size:1.05rem}
+.wait{margin:auto;color:var(--muted);font-size:1.2rem}
+.teams{display:grid;gap:12px}
+.big{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:18px 22px;border-radius:22px;background:var(--c);color:#fff;font-size:1.6rem;font-weight:800;text-align:left;box-shadow:0 10px 24px rgba(27,36,48,.12)}
+.big small{font-size:.95rem;font-weight:600;opacity:.9}
+.others{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.others button{padding:16px 10px;border-radius:18px;border:3px solid var(--ink);font-size:1.05rem;font-weight:700}
+.seat{margin-top:auto;margin-bottom:auto;padding:36px 26px;border-radius:30px;background:var(--c);color:#fff;text-align:center;box-shadow:0 18px 40px rgba(27,36,48,.16)}
+.seat .tag{font-size:1rem;font-weight:700;opacity:.9;letter-spacing:.06em;text-transform:uppercase}
+.seat .who{font-size:3rem;font-weight:900;line-height:1.1;margin:8px 0 14px}
+.seat p{margin:0;font-size:1.15rem;font-weight:600}
+.link{align-self:center;padding:12px 18px;color:var(--muted);font-weight:700;text-decoration:underline}
+#conn{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));padding:12px 16px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;text-align:center}
+
+/* ---- tv ---- */
+.stage{height:100vh;overflow:hidden;display:flex;flex-direction:column;padding:4vh 5vw}
+.stage header{display:flex;align-items:baseline;gap:2vw}
+.brand{font-size:9vh;font-weight:900;letter-spacing:-.02em;line-height:1}
+.sub{font-size:3vh;font-weight:700;color:var(--muted)}
+.stage main{flex:1;display:grid;grid-template-columns:34vw 1fr;gap:5vw;align-items:center;min-height:0}
+.join{text-align:center}
+.join img{width:30vw;max-height:52vh;background:#fff;padding:1.6vh;border-radius:3vh;box-shadow:0 2vh 5vh rgba(27,36,48,.10)}
+.how{margin-top:2.4vh;font-size:3.4vh;font-weight:800}
+.url{margin-top:.8vh;font-size:2.6vh;font-weight:600;color:var(--muted);word-break:break-all}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:2.4vh}
+.tile{padding:3vh 2vw;border-radius:3vh;background:#fff;border-left:1.4vw solid var(--c);box-shadow:0 1.6vh 4vh rgba(27,36,48,.08)}
+.tile .n{font-size:4.6vh;font-weight:900}
+.tile .s{margin-top:.6vh;font-size:2.6vh;font-weight:700;color:var(--muted)}
+.tile.ready .s{color:var(--green)}
+.stage .others{display:block;margin-top:3vh;font-size:2.8vh;font-weight:700}
+.foot{margin-top:1.6vh;font-size:2.6vh;font-weight:600;color:var(--muted)}
+
+/* ---- värd ---- */
+.admin main{max-width:640px;margin:0 auto;padding:24px 18px 60px;display:grid;gap:18px}
+.card{background:#fff;border-radius:20px;padding:18px 20px;box-shadow:0 8px 22px rgba(27,36,48,.08)}
+.card h2{margin:0 0 12px;font-size:1.15rem;font-weight:800}
+.rowx{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:2px solid #F0E9DC}
+.rowx:first-of-type{border-top:0}
+.dot{width:18px;height:18px;border-radius:50%;background:var(--c);flex:none}
+.grow{flex:1;min-width:0}
+input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:#fff;color:inherit;width:100%}
+.btn{padding:10px 16px;border-radius:12px;background:var(--ink);color:#fff;font-weight:700}
+.btn.ghost{background:none;border:2px solid var(--ink);color:var(--ink)}
+.btn.warn{background:var(--red)}
+.step{display:flex;align-items:center;gap:14px;font-size:1.4rem;font-weight:800}
+.step .btn{width:48px;height:48px;padding:0;font-size:1.5rem}
+.muted{color:var(--muted);font-size:.95rem}
+.err{color:var(--red);font-weight:700;min-height:1.3em}

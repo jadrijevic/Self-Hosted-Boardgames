@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Syna – värd</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin">
+<main id="app"><p class="muted">Ansluter …</p></main>
+<script type="module">
+import { connect, esc, store } from '/common.js';
+
+const app = document.getElementById('app');
+let state = null;
+let denied = false;
+let armed = false; // nollställning kräver två tryck
+let error = '';
+
+const link = connect('admin', {
+  onState(s) { state = s; denied = false; render(); },
+  onDenied() { denied = true; state = null; render(); },
+  onError(e) { error = e; render(); },
+});
+
+const devices = (list, label = '') => list.map((d) => `
+  <div class="rowx">
+    <div class="grow">${esc(d.name || 'Mobil ' + d.id)} <span class="muted">${label}${d.online ? 'ansluten' : 'ej ansluten'}</span></div>
+    <button class="btn ghost" data-do="kick" data-device="${esc(d.id)}">Ta bort</button>
+  </div>`).join('');
+
+function render() {
+  // Skriv inte över ett fält som värden håller på att fylla i.
+  if (document.activeElement?.tagName === 'INPUT' && state && !denied) return;
+  if (denied) {
+    app.innerHTML = `
+      <h1>Värd</h1>
+      <form class="card" id="pinform">
+        <h2>Pinkod</h2>
+        <input name="pin" inputmode="numeric" autocomplete="off" placeholder="Pinkod" required>
+        <p class="muted">Koden står i containerns logg, eller är den du satt i ADMIN_PIN.</p>
+        <button class="btn">Logga in</button>
+      </form>`;
+    return;
+  }
+  if (!state) return;
+  app.innerHTML = `
+    <h1>Värd</h1>
+    <div class="err">${esc(error)}</div>
+    <section class="card">
+      <h2>Antal lag</h2>
+      <div class="step">
+        <button class="btn" data-do="count" data-n="${state.teams.length - 1}">−</button>
+        <span>${state.teams.length}</span>
+        <button class="btn" data-do="count" data-n="${state.teams.length + 1}">+</button>
+      </div>
+      <p class="muted">Två till sex lag. Tre eller fyra är grundläget.</p>
+    </section>
+    ${state.teams.map((t) => `
+      <section class="card" style="--c:${esc(t.color)}">
+        <div class="rowx">
+          <div class="dot"></div>
+          <div class="grow"><input value="${esc(t.name)}" maxlength="14" data-team="${esc(t.id)}" aria-label="Lagnamn"></div>
+        </div>
+        ${devices(t.devices) || '<p class="muted">Ingen mobil ansluten.</p>'}
+      </section>`).join('')}
+    <section class="card">
+      <h2>Publik och kontrollant</h2>
+      ${devices(state.judges, 'kontrollant, ') + devices(state.audience, 'publik, ') || '<p class="muted">Ingen ännu.</p>'}
+      <p class="muted">Anslutna utan roll: ${state.unseated ?? 0}</p>
+    </section>
+    <section class="card">
+      <h2>Börja om</h2>
+      <button class="btn warn" data-do="reset">${armed ? 'Säker? Tryck igen' : 'Nollställ kvällen'}</button>
+      <p class="muted">Alla mobiler får välja lag på nytt.</p>
+    </section>`;
+}
+
+app.addEventListener('submit', (e) => {
+  e.preventDefault();
+  store.set('pin', new FormData(e.target).get('pin').trim());
+  denied = false;
+  document.activeElement?.blur();
+  link.reconnect();
+});
+
+app.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-do]');
+  if (!b) return;
+  error = '';
+  if (b.dataset.do === 'count') link.send({ t: 'setTeamCount', count: Number(b.dataset.n) });
+  else if (b.dataset.do === 'kick') link.send({ t: 'kick', device: b.dataset.device });
+  else if (b.dataset.do === 'reset') {
+    if (armed) link.send({ t: 'reset' });
+    armed = !armed;
+    render();
+  }
+});
+
+app.addEventListener('change', (e) => {
+  if (!e.target.dataset.team) return;
+  error = '';
+  link.send({ t: 'renameTeam', team: e.target.dataset.team, name: e.target.value });
+  e.target.blur();
+});
+</script>
+</body>
+</html>
