@@ -1,0 +1,108 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# En körning per gren: en ny push avbryter den pågående. På main bygger då bara den senaste
+# mergen avbilden, så att en äldre som blir klar sist inte hamnar i drift.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Skripten
+        run: |
+          shellcheck -x deploy/*.sh test/stubs/*
+          ! grep -rlI $'\r' deploy test/stubs
+
+  # En pull request bygger avbilden och provar den som i drift: en trasig avbild ska inte nå main,
+  # eftersom servern hämtar den nya avbilden inom en timme efter en merge.
+  image-check:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: boardgames:prov
+      - name: Avbilden serverar spelet som i drift, och läget överlever en omstart
+        run: |
+          mkdir -p "$RUNNER_TEMP/data"
+          sudo chown 99:100 "$RUNNER_TEMP/data"
+          docker run -d --name prov -p 8090:8080 --user 99:100 --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$RUNNER_TEMP/data:/data" -e ADMIN_PIN=1234 boardgames:prov
+          svarar() { for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8090/halsa && return 0; sleep 1; done; return 1; }
+          svarar
+          curl -fsS http://127.0.0.1:8090/ | grep -q 'id="app"'
+          curl -fsS http://127.0.0.1:8090/scen | grep -q 'id="game"'
+          curl -fsS -o /dev/null http://127.0.0.1:8090/admin
+          curl -fsS http://127.0.0.1:8090/qr.svg | grep -q '<svg'
+          curl -fsS http://127.0.0.1:8090/lage | grep -q '"phase":"lobby"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -m 2 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+            -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' http://127.0.0.1:8090/ws)" = 101
+          docker exec prov node deploy/kontroll.js
+          sudo test -s "$RUNNER_TEMP/data/room.json"
+          docker exec prov test -f /app/deploy/boardgames-installera-v1.sh
+          docker exec prov test -f /app/deploy/boardgames-uppdatera-v1.sh
+          docker exec prov test -f /app/deploy/compose.yaml
+          # En värd startar spelet. Efter en omstart, som vid en uppdatering, ska spelet finnas kvar.
+          docker exec prov node -e "
+            const WebSocket = require('ws');
+            const ws = new WebSocket('ws://127.0.0.1:8080/ws');
+            ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', kind: 'admin', pin: '1234' })); ws.send(JSON.stringify({ t: 'start' })); });
+            ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.t === 'state' && m.state.phase === 'game') setTimeout(() => process.exit(0), 500); });
+            setTimeout(() => process.exit(1), 5000);"
+          docker restart prov
+          svarar
+          curl -fsS http://127.0.0.1:8090/lage | grep -q '"phase":"game"'
+      - if: failure()
+        run: docker logs prov || true
+
+  image:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

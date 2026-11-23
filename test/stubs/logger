@@ -1,0 +1,4 @@
+#!/bin/bash
+# Låtsas-logger: syslog hamnar i en fil.
+shift 2
+echo "$*" >> "$STUB/syslog"

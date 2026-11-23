@@ -2,7 +2,7 @@
 // och får tillbaka en ögonblicksbild av läget, filtrerad efter sin roll.
 
 import http from 'node:http';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync } from 'node:fs';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,20 +24,32 @@ const KINDS = ['stage', 'player', 'admin'];
 const MAX_DEVICES = 300;
 
 function load(file) {
+  let raw;
+  try { raw = readFileSync(file, 'utf8'); } catch { return newRoom(); } // ingen sparad kväll: börja om
   try {
-    const room = JSON.parse(readFileSync(file, 'utf8'));
+    const room = JSON.parse(raw);
     if (isValidRoom(room)) return normalize(room);
-  } catch { /* ingen sparad kväll: börja om */ }
+  } catch { /* går inte att tolka: hanteras nedan */ }
+  // En fil som inte går att använda skrivs aldrig över tyst. Rekordboken kan ligga i den.
+  const aside = `${file}.olasbar-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  try {
+    renameSync(file, aside);
+    console.error(`Det sparade läget gick inte att läsa. Det ligger kvar som ${aside}, och spelet börjar om.`);
+  } catch (e) {
+    console.error('Det sparade läget gick inte att läsa och inte att flytta undan:', e.message);
+  }
   return newRoom();
 }
 
-export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '' } = {}) {
+// logic går att byta ut i tester. I drift är det alltid spellogiken i room.js.
+export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '', logic = { apply, tick } } = {}) {
   mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, 'room.json');
   const pin = adminPin ? String(adminPin) : String(randomInt(1000, 10000));
   const room = load(file);
   const conns = new Map(); // ws -> { token, kind, isAdmin }
   let saveTimer = null;
+  let lastChange = Date.now();
 
   const online = () => new Set([...conns.values()].map((c) => c.token).filter(Boolean));
   const send = (ws, msg) => { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); };
@@ -56,6 +68,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   // Varje ändring höjer versionen, går ut till alla och sparas strax efteråt.
   function changed() {
     room.v += 1;
+    lastChange = Date.now();
     const on = online();
     for (const [ws, c] of conns) send(ws, { t: 'state', state: viewFor(room, c.token, c.kind, on) });
     if (!saveTimer) saveTimer = setTimeout(save, 150);
@@ -71,6 +84,11 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
     try {
       const { pathname } = new URL(req.url, 'http://localhost');
       if (pathname === '/halsa') return reply(res, 200, 'text/plain; charset=utf-8', 'ok');
+      // Läget i korthet, utan hemligheter. Uppdateringsskriptet läser det för att inte starta om mitt i ett spel.
+      if (pathname === '/lage') {
+        const body = { phase: room.phase, online: conns.size, idleSec: Math.floor((Date.now() - lastChange) / 1000), v: room.v };
+        return reply(res, 200, 'application/json; charset=utf-8', JSON.stringify(body));
+      }
       if (pathname === '/adress') return reply(res, 200, 'text/plain; charset=utf-8', joinUrl(req));
       if (pathname === '/qr.svg') {
         const svg = await QRCode.toString(joinUrl(req), { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
@@ -118,7 +136,14 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
 
       const c = conns.get(ws);
       if (!c) return;
-      const err = apply(room, c.token, m, c.isAdmin, Date.now());
+      // Ett fel i spellogiken får inte fälla servern mitt i en kväll. Felet loggas och spelet går vidare.
+      let err;
+      try {
+        err = logic.apply(room, c.token, m, c.isAdmin, Date.now());
+      } catch (e) {
+        console.error(`Fel i spellogiken (${String(m.t).slice(0, 30)}):`, e);
+        return send(ws, { t: 'error', error: 'serverfel, försök igen' });
+      }
       if (err) return send(ws, { t: 'error', error: err });
       changed();
     });
@@ -134,7 +159,13 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   }, 15000);
 
   // Spelets klocka: när tiden för ett uppdrag har gått ut går servern själv vidare.
-  const clock = setInterval(() => { if (tick(room, Date.now())) changed(); }, 250);
+  const clock = setInterval(() => {
+    try {
+      if (logic.tick(room, Date.now())) changed();
+    } catch (e) {
+      console.error('Fel i spelets klocka:', e);
+    }
+  }, 250);
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);

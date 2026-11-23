@@ -1,0 +1,58 @@
+#!/bin/bash
+# Låtsas-docker för testerna av installations- och uppdateringsskripten.
+# Tillståndet ligger i katalogen $STUB. "compose up -d" startar den riktiga servern ur repot,
+# så att skriptens kontroller går mot en riktig server.
+echo "docker $*" >> "$STUB/anrop.log"
+envv() { grep -m1 "^$1=" "$PROJ/.env" 2>/dev/null | cut -d= -f2- | sed "s/^'\(.*\)'\$/\1/"; }
+# En avslutad process kan ligga kvar som zombie tills någon hämtar dess slutkod. Den räknas som stoppad.
+kor() {
+  local pid
+  pid="$(cat "$STUB/pid" 2>/dev/null)" || return 1
+  kill -0 "$pid" 2>/dev/null && [ "$(ps -o stat= -p "$pid" 2>/dev/null | cut -c1)" != "Z" ]
+}
+case "${1:-}" in
+  compose)
+    case "$*" in
+      "compose version") exit 0 ;;
+      *" up -d")
+        [ -f "$STUB/up-misslyckas" ] && exit 1
+        if kor; then
+          kill "$(cat "$STUB/pid")"
+          while kor; do sleep 0.05; done
+        fi
+        PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
+          ADMIN_PIN="$(envv ADMIN_PIN)" PUBLIC_URL="$(envv PUBLIC_URL)" \
+          nohup node "$REPO/server/index.js" > "$STUB/server.log" 2>&1 &
+        echo $! > "$STUB/pid"
+        cp "$STUB/avbild-id" "$STUB/container-avbild"
+        exit 0 ;;
+    esac
+    exit 1 ;;
+  network) exit 0 ;;
+  port) if kor; then echo "8080/tcp -> 0.0.0.0:$(envv BOARDGAMES_PORT)"; fi; exit 0 ;;
+  pull)
+    [ -f "$STUB/pull-misslyckas" ] && exit 1
+    [ -f "$STUB/ny-avbild" ] && mv "$STUB/ny-avbild" "$STUB/avbild-id"
+    exit 0 ;;
+  build) echo "sha256:lokalbyggd" > "$STUB/avbild-id"; exit 0 ;;
+  image)
+    case "${2:-}" in
+      inspect) cat "$STUB/avbild-id" 2>/dev/null || exit 1 ;;
+      *) exit 0 ;;
+    esac ;;
+  inspect)
+    case "${3:-}" in
+      '{{.Image}}') cat "$STUB/container-avbild" 2>/dev/null || exit 1 ;;
+      '{{.State.Running}}') if kor; then echo true; else echo false; fi ;;
+      '{{.Config.User}}') echo "99:100" ;;
+    esac ;;
+  run)
+    # docker run --rm [--pull always] --entrypoint cat <avbild> /app/deploy/<fil>
+    fil="${!#}"
+    cat "$REPO/${fil#/app/}" ;;
+  exec)
+    # docker exec boardgames node deploy/kontroll.js
+    cd "$REPO" && PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
+      ADMIN_PIN="$(envv ADMIN_PIN)" node deploy/kontroll.js ;;
+  *) exit 0 ;;
+esac
