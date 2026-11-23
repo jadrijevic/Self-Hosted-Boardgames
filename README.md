@@ -4,7 +4,7 @@ Egna sällskapsspel som körs på en server hemma och spelas i mobilens webbläs
 
 ## Läget just nu
 
-Syna går att spela från start till slut: lobby, sex ronder, final och resultat. Inget är provspelat med människor ännu.
+Syna går att spela från start till slut: lobby, sex ronder, final och resultat. Inget är provspelat med människor ännu, och inget är kört på Unraid.
 
 Det här fungerar:
 
@@ -22,7 +22,9 @@ Det här fungerar:
 - Husets röst på storbilden läser upp uppdraget med webbläsarens talsyntes. Den slås på med knappen i lobbyn.
 - Mobilen visar allt som storbilden visar: uppdrag, ämne, bud, syn, klocka, rondens poäng och ställning. Spelet går att spela utan storbild, och då läser värden upp uppdraget från sin sida.
 
-Inte byggt ännu: publikens satsningar, omplanering när ett lag hoppar av mitt i spelet, uppdragen Baklänges, Minnet och Gubben, en egen vy för rekordboken och ett installationsskript för Unraid. Reglerna står i [games/syna/REGLER.md](games/syna/REGLER.md).
+- Installation på Unraid med en rad, och uppdatering varje timme som aldrig startar om mitt i ett spel.
+
+Inte byggt ännu: publikens satsningar, omplanering när ett lag hoppar av mitt i spelet, uppdragen Baklänges, Minnet och Gubben, en egen vy för rekordboken och https. Reglerna står i [games/syna/REGLER.md](games/syna/REGLER.md).
 
 ## Så hänger det ihop
 
@@ -33,7 +35,8 @@ Servern äger hela spelläget. Mobilerna skickar avsikter över en WebSocket ("v
 | `server/` | Webbserver, WebSocket-synk och spelläget för kvällen (`room.js`). Delas av alla spel. |
 | `games/syna/` | Det som bara gäller Syna: regler, spelmotor, uppdrag, schemaläggare, simuleringar. |
 | `public/` | Sidorna för mobil, storbild och värd. Ren HTML och JavaScript, inget byggsteg. |
-| `test/` | Tester som körs med `npm test`. |
+| `deploy/` | Det som behövs på Unraid: compose-filen, installations- och uppdateringsskriptet och kontrollen. Följer med avbilden. |
+| `test/` | Tester som körs med `npm test`. `test/stubs/` är en låtsas-docker för skripten. |
 | `tools/` | Layoutkontroll i webbläsare. Används inte när spelet körs. |
 
 Nya spel får en egen mapp under `games/` och återanvänder servern och lobbyn.
@@ -55,28 +58,51 @@ Storbilden är en vanlig webbsida. Den visas från en dator med webbläsaren i h
 - Layouten är provad i 16:9 och 16:10, med upp till sex lag och lagnamn på 14 tecken.
 - Saknas storbild räcker mobilerna. Husets röst finns bara på storbilden.
 
-## Köra i Docker
+## Köra på Unraid
+
+Varje merge till `main` bygger avbilden `ghcr.io/jadrijevic/self-hosted-boardgames:latest` när testerna är gröna. Installationen följer med avbilden och är en rad i Unraids terminal:
 
 ```
-docker build -t boardgames .
-docker run -d --name boardgames --restart unless-stopped \
-  -p 8087:8080 \
-  -v /mnt/user/appdata/boardgames:/data \
-  --user 99:100 \
-  -e ADMIN_PIN=1234 \
-  boardgames
+docker run --rm --pull always --entrypoint cat ghcr.io/jadrijevic/self-hosted-boardgames:latest \
+  /app/deploy/boardgames-installera-v1.sh > /boot/config/scripts/boardgames-installera-v1.sh \
+  && bash /boot/config/scripts/boardgames-installera-v1.sh
 ```
 
-Porten 8087 är ett exempel. Avbilden är ännu inte provbyggd, och ett installationsskript för Unraid kommer i ett senare steg.
+Skriptet visar vad det ska göra och frågar innan något ändras. En ny körning är säker: det som redan stämmer lämnas som det är.
+
+- **Projektet** är Compose Manager-projektet `boardgames` i `/boot/config/plugins/compose.manager/projects/boardgames/`, med värdena i `.env` (0600).
+- **Containern** kör som 99:100 med skrivskyddat filsystem, på nätet `docker_network` och port 8090 mot LAN. Välj en annan port med `PORT=<nr>` framför `bash`.
+- **Läget** ligger i `/mnt/system_apps/appdata/boardgames/data/room.json`: kvällens spel och rekordboken.
+- **Värdens pinkod** slumpas vid första installationen, står i `.env` och skrivs ut när skriptet är klart.
+- **Kontrollen** i slutet provar sidorna och WebSocket genom porten och att läget hamnar på disk. Samma kontroll när som helst: `docker exec boardgames node deploy/kontroll.js`.
+
+Paketet i GHCR måste vara publikt för att servern ska kunna hämta avbilden utan inloggning. Det ställs in en gång: GitHub → Packages → self-hosted-boardgames → Package settings → Change visibility. Avbilden innehåller bara kod.
+
+### Uppdateringar
+
+`/boot/config/scripts/boardgames-uppdatera-v1.sh` körs varje timme (minut 40) och startar om containern när en ny avbild finns. En merge är alltså i drift inom ungefär en timme. Skriptet väntar till nästa timme
+
+- medan ett spel pågår (ändrat de senaste tre timmarna)
+- när någon har varit inne de senaste tio minuterna
+- medan 3D-skrivaren skriver ut.
+
+Före omstarten kopieras läget till `room.json.fore-uppdatering`. En stoppad container startas inte. Det som händer loggas i syslog med taggen `boardgames-uppdatera`. Ändras `compose.yaml` krävs installationsskriptet igen.
+
+Containern startar om av sig själv högst tre gånger efter en krasch (`restart: on-failure:3`). Det avviker med flit från övriga containrar: en krasch mitt i en spelkväll ska läka på några sekunder, medan ett bestående fel fortfarande stannar och syns i containerlarmet.
+
+### Inställningar
 
 | Variabel | Standard | Betydelse |
 |---|---|---|
-| `PORT` | `8080` | Porten servern lyssnar på i containern. |
-| `DATA_DIR` | `./data` (`/data` i Docker) | Där läget sparas. |
-| `ADMIN_PIN` | slumpas vid start | Pinkoden till `/admin`. Utan fast kod står den i loggen. |
-| `PUBLIC_URL` | adressen i anropet | Adressen som QR-koden pekar på, till exempel `https://syna.example.org`. |
+| `PORT` | `8080` | Porten servern lyssnar på i containern. Låst i `compose.yaml`. |
+| `DATA_DIR` | `./data` (`/data` i Docker) | Där läget sparas. Låst i `compose.yaml`. |
+| `ADMIN_PIN` | slumpas vid start | Pinkoden till `/admin`. Installationsskriptet sätter en fast kod. |
+| `PUBLIC_URL` | adressen i anropet | Adressen som QR-koden pekar på, till exempel `https://syna.example.org`. Sätts med `ADRESS=<adress>` framför `bash`. |
+| `BOARDGAMES_IMAGE`, `BOARDGAMES_PORT` | – | Avbilden och porten mot LAN. Skrivs av installationsskriptet. |
 
-Mikrofon och skärmlås i mobilen kräver https. Det löses med en omvänd proxy framför containern.
+`/halsa` svarar `ok` när servern är uppe. `/lage` visar fas, antal anslutna och tid sedan senaste ändring, utan hemligheter.
+
+Skärmlåset i mobilen kräver https. Det löses med en omvänd proxy framför containern och är inte uppsatt än. Utan https kan en mobil somna mitt i en rond; den är ikapp när den vaknar.
 
 ## Tester
 
@@ -84,7 +110,9 @@ Mikrofon och skärmlås i mobilen kräver https. Det löses med en omvänd proxy
 npm test
 ```
 
-Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server.
+Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Ett slumpprov skickar 30 000 trasiga och giltiga meddelanden genom alla steg och kräver att spellogiken aldrig kastar ett undantag.
+
+Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart.
 
 Layouten provas för sig i en riktig webbläsare. Kontrollen ritar varje uppdrag i varje steg, plus de trängsta fallen med sex lag, och mäter att inget hamnar utanför bilden och att ingen text på storbilden är för liten. Den kräver Python med Playwright och Chrome eller Chromium:
 

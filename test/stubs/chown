@@ -1,0 +1,3 @@
+#!/bin/bash
+# Låtsas-chown: ägaren 99:100 går bara att sätta som root.
+echo "chown $*" >> "$STUB/anrop.log"

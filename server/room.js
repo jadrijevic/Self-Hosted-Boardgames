@@ -50,6 +50,7 @@ function unseat(dev) {
 
 // Tar emot en avsikt från en enhet. Returnerar null om den gick igenom, annars en feltext.
 export function apply(room, token, msg, isAdmin = false, now = Date.now(), rng = Math.random) {
+  if (!msg || typeof msg !== 'object') return 'okänt meddelande';
   const dev = token ? room.devices[token] : null;
   switch (msg?.t) {
     case 'choose': {

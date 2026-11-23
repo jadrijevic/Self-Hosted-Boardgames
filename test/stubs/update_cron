@@ -1,0 +1,3 @@
+#!/bin/bash
+# Låtsas-update_cron: Unraid lägger cronfilerna i /etc/cron.d/root.
+cat "$CRONFIL" > "$CRONROT"

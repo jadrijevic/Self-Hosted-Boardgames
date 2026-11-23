@@ -1,0 +1,35 @@
+# Sällskapsspelen som Compose Manager-projekt på Unraid.
+# Installeras av installationsskriptet i samma avbild (deploy/boardgames-installera-v*.sh) till
+#   /boot/config/plugins/compose.manager/projects/boardgames/compose.yaml
+# Värdena ligger i .env bredvid filen (0600) och aldrig i git.
+services:
+  boardgames:
+    image: ${BOARDGAMES_IMAGE:-boardgames:lokal}
+    container_name: boardgames
+    # Avviker från övriga containrar (P1, restart "no"), med flit: en krasch mitt i en spelkväll
+    # ska läka på några sekunder. Läget ligger på disk och mobilerna ansluter igen av sig själva.
+    # Efter tre försök stannar containern, så att ett bestående fel syns i containerlarmet.
+    restart: on-failure:3
+    user: "99:100"
+    env_file: .env
+    environment:
+      # Låsta här så att .env inte kan flytta porten i containern eller läget på disk
+      PORT: "8080"
+      DATA_DIR: /data
+    ports:
+      # 0.0.0.0 uttryckligen: annars lyssnar Docker även på [::], förbi DOCKER-USER
+      - "0.0.0.0:${BOARDGAMES_PORT:-8090}:8080"
+    volumes:
+      # Direkt mot poolen och inte via /mnt/user (FUSE), så att ägaren 99:100 gäller
+      - /mnt/system_apps/appdata/boardgames/data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [docker_network]
+
+networks:
+  docker_network:
+    external: true

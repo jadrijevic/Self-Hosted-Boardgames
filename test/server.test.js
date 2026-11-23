@@ -1,7 +1,7 @@
 // Prov med riktiga WebSocket-klienter mot en riktig server på en ledig port.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -145,6 +145,93 @@ test('spelet startas av värden, och ett bud syns bara för det egna laget tills
     assert.equal(open.state.syna.bids[a].value, min + step);
     for (const c of [...Object.values(phones), admin]) c.ws.close();
   } finally {
+    await app.close();
+  }
+});
+
+test('läget i korthet visar fas, anslutna och tid sedan senaste ändring, utan hemligheter', async () => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
+  const app = await startServer({ port: 0, dataDir, adminPin: '4321' });
+  try {
+    const lage = async () => (await fetch(`http://127.0.0.1:${app.port}/lage`)).json();
+    assert.deepEqual(Object.keys(await lage()).sort(), ['idleSec', 'online', 'phase', 'v']);
+    assert.equal((await lage()).phase, 'lobby');
+    assert.equal((await lage()).online, 0);
+
+    const admin = client(app.port, { kind: 'admin', pin: '4321' });
+    await admin.next((m) => m.t === 'state');
+    assert.equal((await lage()).online, 1);
+    admin.send({ t: 'start' });
+    await admin.next((m) => m.t === 'state' && m.state.phase === 'game');
+    const now = await lage();
+    assert.equal(now.phase, 'game');
+    assert.ok(now.idleSec <= 1);
+    assert.doesNotMatch(JSON.stringify(now), /4321|token/);
+    admin.ws.close();
+  } finally {
+    await app.close();
+  }
+});
+
+test('ett fel i spellogiken fäller inte servern', async () => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  let ticks = 0;
+  // En spellogik som går sönder på beställning: ett meddelande som kastar, och en klocka som kastar varannan gång.
+  const logic = {
+    apply(room, token, msg) {
+      if (msg.t === 'krasch') throw new Error('trasig logik');
+      return msg.t === 'nej' ? 'nej tack' : null;
+    },
+    tick() {
+      ticks += 1;
+      if (ticks % 2) throw new Error('trasig klocka');
+      return false;
+    },
+  };
+  const app = await startServer({ port: 0, dataDir, adminPin: '4321', logic });
+  try {
+    const phone = client(app.port, { kind: 'player' });
+    await phone.next((m) => m.t === 'state');
+    phone.send({ t: 'krasch' });
+    assert.equal((await phone.next((m) => m.t === 'error')).error, 'serverfel, försök igen');
+    phone.send({ t: 'nej' });
+    assert.equal((await phone.next((m) => m.t === 'error' && m.error === 'nej tack')).error, 'nej tack');
+    phone.send({ t: 'ping', c: 1 });
+    await phone.next((m) => m.t === 'pong');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.ok(ticks >= 2, 'klockan går vidare efter ett fel');
+    assert.equal(await (await fetch(`http://127.0.0.1:${app.port}/halsa`)).text(), 'ok');
+    assert.ok(errors.some((e) => e.includes('Fel i spellogiken (krasch)')));
+    assert.ok(errors.some((e) => e.includes('Fel i spelets klocka')));
+    phone.ws.close();
+  } finally {
+    console.error = original;
+    await app.close();
+  }
+});
+
+test('ett sparat läge som inte går att läsa läggs undan i stället för att skrivas över', async () => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
+  writeFileSync(path.join(dataDir, 'room.json'), '{"records": {"djuren": {"value": 14}}, "teams": "trasigt"');
+  const original = console.error;
+  const errors = [];
+  console.error = (...args) => errors.push(args.join(' '));
+  const app = await startServer({ port: 0, dataDir, adminPin: '4321' });
+  try {
+    const stage = client(app.port, { kind: 'stage' });
+    const first = await stage.next((m) => m.t === 'state');
+    assert.equal(first.state.phase, 'lobby');
+    assert.equal(first.state.teams.length, 4);
+    stage.ws.close();
+    const aside = readdirSync(dataDir).filter((f) => f.startsWith('room.json.olasbar-'));
+    assert.equal(aside.length, 1);
+    assert.match(readFileSync(path.join(dataDir, aside[0]), 'utf8'), /"djuren": \{"value": 14\}/);
+    assert.ok(errors.some((e) => e.includes('gick inte att läsa')));
+  } finally {
+    console.error = original;
     await app.close();
   }
 });
