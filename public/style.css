@@ -21,28 +21,31 @@ h1{margin:0;font-size:2rem;font-weight:800;letter-spacing:-.02em}
 .link{align-self:center;padding:12px 18px;color:var(--muted);font-weight:700;text-decoration:underline}
 #conn{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));padding:12px 16px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;text-align:center}
 
-/* ---- tv ---- */
-.stage{height:100vh;overflow:hidden;display:flex;flex-direction:column;padding:4vh 5vw}
+/* ---- storbild ---- */
+/* Minsta text på storbilden är 3,5 % av bildhöjden (--min). Då går allt att läsa när bilden är
+   minst 15 tum per meter till den som sitter längst bort. Bara värdens egen knapp är mindre. */
+.stage{--min:3.5vh;height:100vh;overflow:hidden;display:flex;flex-direction:column;padding:4vh 5vw}
 .stage header{display:flex;align-items:baseline;gap:2vw}
 .brand{font-size:9vh;font-weight:900;letter-spacing:-.02em;line-height:1}
-.sub{font-size:3vh;font-weight:700;color:var(--muted)}
+.sub{font-size:var(--min);font-weight:700;color:var(--muted)}
 .stage main{flex:1;display:grid;grid-template-columns:34vw 1fr;gap:5vw;align-items:center;min-height:0}
 .join{text-align:center}
 .join img{width:30vw;max-height:52vh;background:#fff;padding:1.6vh;border-radius:3vh;box-shadow:0 2vh 5vh rgba(27,36,48,.10)}
-.how{margin-top:2.4vh;font-size:3.4vh;font-weight:800}
-.url{margin-top:.8vh;font-size:2.6vh;font-weight:600;color:var(--muted);word-break:break-all}
-.tiles{display:grid;grid-template-columns:1fr 1fr;gap:2.4vh}
-.tile{padding:3vh 2vw;border-radius:3vh;background:#fff;border-left:1.4vw solid var(--c);box-shadow:0 1.6vh 4vh rgba(27,36,48,.08)}
-.tile .n{font-size:4.6vh;font-weight:900}
-.tile .s{margin-top:.6vh;font-size:2.6vh;font-weight:700;color:var(--muted)}
+.how{margin-top:2.4vh;font-size:3.6vh;font-weight:800}
+.url{margin-top:.8vh;font-size:var(--min);font-weight:600;color:var(--muted);word-break:break-all}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2.4vh}
+.tile{min-width:0;padding:2.4vh 1.6vw;border-radius:3vh;background:#fff;border-left:1.4vw solid var(--c);box-shadow:0 1.6vh 4vh rgba(27,36,48,.08)}
+.tile .n{font-size:clamp(3.5vh,2.3vw,4.2vh);font-weight:900;overflow-wrap:anywhere}
+.tile .s{margin-top:.6vh;font-size:var(--min);font-weight:700;color:var(--muted)}
 .tile.ready .s{color:var(--green)}
-.stage .others{display:block;margin-top:3vh;font-size:2.8vh;font-weight:700}
-.foot{margin-top:1.6vh;font-size:2.6vh;font-weight:600;color:var(--muted)}
+.stage .others{display:block;margin-top:3vh;font-size:var(--min);font-weight:700}
+.foot{margin-top:1.6vh;font-size:var(--min);font-weight:600;color:var(--muted)}
 
 /* ---- värd ---- */
 .admin main{max-width:640px;margin:0 auto;padding:24px 18px 60px;display:grid;gap:18px}
 .card{background:#fff;border-radius:20px;padding:18px 20px;box-shadow:0 8px 22px rgba(27,36,48,.08)}
 .card h2{margin:0 0 12px;font-size:1.15rem;font-weight:800}
+.card>.txt{margin:10px 0}
 .rowx{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:2px solid #F0E9DC}
 .rowx:first-of-type{border-top:0}
 .dot{width:18px;height:18px;border-radius:50%;background:var(--c);flex:none}
@@ -56,14 +59,14 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 .muted{color:var(--muted);font-size:.95rem}
 .err{color:var(--red);font-weight:700;min-height:1.3em}
 
-/* ---- spelet: tv ---- */
+/* ---- spelet: storbild ---- */
 .voice{margin-left:auto;padding:1vh 1.6vw;border-radius:999px;border:.3vh solid var(--ink);font-size:2.2vh;font-weight:700}
 .stage.ingame header,.stage.ingame #lobby{display:none}
 #game{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.4vh;min-height:0}
 #game[hidden]{display:none}
-.ghead{display:flex;align-items:center;gap:2vw;font-size:3.2vh;font-weight:800;color:var(--muted)}
+.ghead{display:flex;align-items:center;gap:2vw;font-size:var(--min);font-weight:800;color:var(--muted)}
 .ghead .tn{color:var(--ink)}
-.pill{display:inline-block;padding:.8vh 1.6vw;border-radius:999px;background:#fff;font-size:2.6vh;font-weight:700;box-shadow:0 .8vh 2vh rgba(27,36,48,.08)}
+.pill{display:inline-block;padding:.8vh 1.6vw;border-radius:2.6vh;background:#fff;font-size:var(--min);font-weight:700;line-height:1.2;box-shadow:0 .8vh 2vh rgba(27,36,48,.08)}
 .pill.hot{background:var(--red);color:#fff}
 .pill.role{background:#FFE7A3}
 .taskbig{font-size:13vh;font-weight:900;letter-spacing:-.02em;line-height:1}
@@ -71,30 +74,60 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 .topic{margin:0;font-size:4.4vh;font-weight:800;color:var(--red)}
 .pills{display:flex;flex-wrap:wrap;gap:1.4vh 1vw}
 .vs{margin:0;font-size:4vh;font-weight:800}
-.rec{margin:0;font-size:2.8vh;font-weight:600;color:var(--muted)}
+.rec{margin:0;font-size:var(--min);font-weight:600;color:var(--muted)}
 .duel{display:grid;grid-template-columns:1fr 1fr;gap:3vw}
 .dt{padding:3vh 2.4vw;border-radius:3vh;background:#fff;border-top:1.6vh solid var(--c);box-shadow:0 1.6vh 4vh rgba(27,36,48,.08);text-align:center}
 .dt.dim{opacity:.45}
 .dn{font-size:4vh;font-weight:800;color:var(--c)}
 .dv{font-size:17vh;font-weight:900;line-height:1.05}
 .dv.small{font-size:8vh;padding:3vh 0}
-.ds{font-size:3vh;font-weight:700;color:var(--muted)}
-.stamp{display:inline-block;margin-top:1.6vh;padding:.4vh 1.4vw;border:.6vh solid var(--red);border-radius:1.4vh;color:var(--red);font-size:3vh;font-weight:900;letter-spacing:.04em;text-transform:uppercase;transform:rotate(-3deg)}
-.foot2{margin:0;font-size:3.2vh;font-weight:700;color:var(--muted)}
+.ds{font-size:var(--min);font-weight:700;color:var(--muted)}
+.stamp{display:inline-block;margin-top:1.6vh;padding:.4vh 1.4vw;border:.6vh solid var(--red);border-radius:1.4vh;color:var(--red);font-size:var(--min);font-weight:900;letter-spacing:.04em;text-transform:uppercase;transform:rotate(-3deg)}
+.foot2{margin:0;font-size:var(--min);font-weight:700;color:var(--muted)}
 .stage .clock{align-self:center;font-size:16vh;font-weight:900;line-height:1}
 .over{margin:0;font-size:7vh;font-weight:900;color:var(--red)}
-.rrows{display:grid;gap:1.4vh}
-.rrow{display:flex;align-items:center;gap:2vw;padding:2vh 2.4vw;border-radius:2.4vh;background:#fff;border-left:1.2vw solid var(--c);box-shadow:0 1.2vh 3vh rgba(27,36,48,.08)}
-.rn{font-size:4vh;font-weight:800;width:24vw}
-.rd{flex:1;font-size:3vh;font-weight:600;color:var(--muted)}
-.rrow b{font-size:6vh;font-weight:900}
+
+/* ---- rondens rader och ställningen: delas av storbild, mobil och värd ---- */
+.rrows{display:grid}
+.rrow{background:#fff;border-left:solid var(--c)}
+.rn{font-weight:800}
+.rd{font-weight:600;color:var(--muted)}
+.rrow b{font-weight:900}
 .pos{color:var(--green)}
 .neg{color:var(--red)}
-.newrec{padding:1.6vh 2vw;border-radius:2vh;background:#FFE7A3;font-size:3.4vh;font-weight:800;text-align:center}
-.board{display:flex;flex-wrap:wrap;gap:1.4vh 1.4vw}
-.brow{display:flex;align-items:baseline;gap:1.2vw;padding:1.2vh 1.8vw;border-radius:2vh;background:#fff;border-left:.9vw solid var(--c);font-size:3.2vh;font-weight:800}
-.brow b{font-size:4.4vh;font-weight:900}
-.hiddenscore{margin:0;font-size:3vh;font-weight:700;color:var(--muted)}
+.newrec{background:#FFE7A3;font-weight:800;text-align:center}
+.brow{background:#fff;border-left:solid var(--c);font-weight:800}
+.brow b{font-weight:900}
+.hiddenscore{margin:0;font-weight:700;color:var(--muted)}
+
+.stage .rrows{gap:1.4vh}
+.stage .rrow{display:flex;align-items:center;gap:2vw;padding:2vh 2.4vw;border-radius:2.4vh;border-left-width:1.2vw;box-shadow:0 1.2vh 3vh rgba(27,36,48,.08)}
+.stage .rn{font-size:4vh;width:24vw}
+.stage .rd{flex:1;font-size:var(--min)}
+.stage .rrow b{font-size:6vh}
+.stage .newrec{padding:1.6vh 2vw;border-radius:2vh;font-size:var(--min)}
+.stage .board{display:flex;flex-wrap:wrap;gap:1.4vh 1.4vw}
+.stage .brow{display:flex;align-items:baseline;gap:1.2vw;padding:1.2vh 1.8vw;border-radius:2vh;border-left-width:.9vw;font-size:var(--min)}
+.stage .brow b{font-size:4.4vh}
+.stage .hiddenscore{font-size:var(--min)}
+/* Många syningar i samma rond: raderna dras ihop så att allt får plats. */
+.stage .rrows.tight{gap:1vh}
+.stage .rrows.tight .rrow{padding:.9vh 2.4vw}
+.stage .rrows.tight .rn{font-size:3.6vh}
+.stage .rrows.tight .rrow b{font-size:4.6vh}
+.stage .rrows.tight .newrec{padding:.9vh 2vw}
+
+.player .rrows,.admin .rrows{gap:8px}
+.player .rrow,.admin .rrow{display:grid;grid-template-columns:1fr auto;grid-template-areas:"n p" "d p";align-items:center;gap:2px 12px;padding:12px 14px;border-radius:16px;border-left-width:8px;box-shadow:0 6px 16px rgba(27,36,48,.08)}
+.player .rn,.admin .rn{grid-area:n;font-size:1.1rem}
+.player .rd,.admin .rd{grid-area:d;font-size:.95rem}
+.player .rrow b,.admin .rrow b{grid-area:p;font-size:1.7rem}
+.player .newrec,.admin .newrec{padding:10px 12px;border-radius:14px}
+.player .board,.admin .board{display:grid;gap:6px}
+.player .brow,.admin .brow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:14px;border-left-width:8px;font-size:1.05rem}
+.player .brow b,.admin .brow b{font-size:1.4rem}
+.player .hiddenscore,.admin .hiddenscore{text-align:center}
+.admin .card .rrow{box-shadow:none;outline:2px solid var(--line)}
 
 /* ---- spelet: mobil, kontrollant och värd ---- */
 .phead{display:flex;flex-direction:column;gap:2px;padding:14px 18px;border-radius:18px;background:var(--c);color:#fff}
@@ -104,10 +137,14 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 .card .card2{box-shadow:none;border:2px solid var(--line);margin-top:10px}
 .lbl{margin:0;font-size:1.25rem;font-weight:800}
 .txt{margin:0;font-size:1.05rem;line-height:1.4;color:#35414F}
+.ptopic{margin:0;font-size:1.15rem;font-weight:800;color:var(--red);text-align:center}
 .unit{margin:0;color:var(--muted);font-weight:600}
 .num{font-size:4.6rem;font-weight:900;line-height:1}
 .stepper{display:grid;grid-template-columns:72px 1fr 72px;align-items:center;gap:10px}
 .stepper button{height:72px;border-radius:20px;background:var(--ink);color:#fff;font-size:2.2rem;font-weight:800}
+.card .stepper{grid-template-columns:56px 1fr 56px}
+.card .stepper button{height:56px;border-radius:16px}
+.card .num{font-size:3.4rem}
 .go{padding:18px;border-radius:20px;background:var(--green);color:#fff;font-size:1.35rem;font-weight:800}
 .opt{padding:16px;border-radius:18px;border:3px solid var(--ink);font-size:1.2rem;font-weight:800}
 .opt small{display:block;font-size:.9rem;font-weight:600;color:var(--muted)}

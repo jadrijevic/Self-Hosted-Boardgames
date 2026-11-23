@@ -46,14 +46,14 @@ export const TASKS = [
   {
     id: 'kedjan', name: 'Kedjan', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 45, unit: 'ord', bid: { min: 3, max: 30, step: 1, start: 10 },
-    text: 'Säg saker som hör till ämnet på tv:n, en person i taget, utan att upprepa. Hur många hinner ni på 45 sekunder?',
+    text: 'Säg saker som hör till rondens ämne, en person i taget, utan att upprepa. Hur många hinner ni på 45 sekunder?',
     role: 'Lagets yngsta säger första ordet.',
     topics: ['Saker i ett kök', 'Djur', 'Länder', 'Saker som är röda', 'Mat på ett kalas', 'Saker i en verktygslåda', 'Idrotter', 'Saker man tar med till stranden'],
   },
   {
     id: 'alfabetet', name: 'Alfabetet', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 60, unit: 'bokstäver', bid: { min: 3, max: 28, step: 1, start: 10 },
-    text: 'Säg ett ord på varje bokstav i alfabetet, i ordning, inom ämnet på tv:n. Hur många bokstäver hinner ni på en minut?',
+    text: 'Säg ett ord på varje bokstav i alfabetet, i ordning, inom rondens ämne. Hur många bokstäver hinner ni på en minut?',
     role: 'Lagets yngsta pekar ut vem som tar nästa bokstav.',
     topics: ['Djur', 'Mat och dryck', 'Förnamn', 'Länder och städer'],
   },

@@ -9,6 +9,8 @@ Egna sällskapsspel för Boris familj, körda på hans Unraid-server och spelade
 - Spellogik hålls ren och utan nätverk, så att den går att testa för sig.
 - Inget byggsteg och så få beroenden som möjligt. Sidorna är ren HTML och JavaScript.
 - Spelet ska tåla att en mobil somnar, laddas om eller byts ut mitt i en rond.
+- Mobilen visar allt som storbilden visar. Spelet ska gå att spela utan storbild.
+- Minsta text på storbilden är 3,5 % av bildhöjden. Nya uppdrag och texter provas med `tools/layoutcheck/check.py`.
 
 ## Språk
 

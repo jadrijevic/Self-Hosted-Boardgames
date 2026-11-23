@@ -6,7 +6,7 @@
   "description": "Egna sällskapsspel som körs hemma och spelas i mobilens webbläsare. Första spelet: Syna.",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
