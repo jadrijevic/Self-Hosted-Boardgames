@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body class="stage">
-<header><div class="brand">SYNA</div><div class="sub">Släktens egen spelshow</div></header>
-<main>
+<header><div class="brand">SYNA</div><div class="sub">Släktens egen spelshow</div><button class="voice" id="voice">Slå på husets röst</button></header>
+<main id="lobby">
   <section class="join">
     <img src="/qr.svg" alt="QR-kod till spelet">
     <div class="how">Skanna med mobilkameran</div>
@@ -21,18 +21,56 @@
     <div class="foot">Väntar på att värden startar.</div>
   </section>
 </main>
+<section id="game" hidden></section>
 <script type="module">
-import { connect, esc } from '/common.js';
+import { connect, esc, runClocks } from '/common.js';
+import { stage } from '/syna.js';
 
 const teams = document.getElementById('teams');
 const others = document.getElementById('others');
+const game = document.getElementById('game');
+const voice = document.getElementById('voice');
+
+// Husets röst: webbläsarens talsyntes läser upp uppdraget. Den måste slås på med ett tryck.
+let voiceOn = false;
+let spoken = '';
+function say(text) {
+  if (!voiceOn) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'sv-SE';
+  u.rate = 0.95;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+if (!('speechSynthesis' in window)) voice.hidden = true;
+voice.addEventListener('click', () => {
+  voiceOn = !voiceOn;
+  voice.textContent = voiceOn ? 'Husets röst är på' : 'Slå på husets röst';
+  say('Husets röst är på.');
+});
+function announce(g) {
+  const key = `${g.round}:${g.task.id}:${g.step}`;
+  if (key === spoken) return;
+  spoken = key;
+  if (g.step === 'intro') say(`${g.task.name}. ${g.task.text} ${g.task.role}${g.topic ? ` Ämnet är: ${g.topic}.` : ''}`);
+  else if (g.step === 'result') say('Tiden är ute.');
+  else if (g.step === 'final') say(`Finalen. ${g.final.name}. ${g.final.text}`);
+}
 
 fetch('/adress').then((r) => r.text()).then((u) => {
   document.getElementById('url').textContent = u.replace(/^https?:\/\//, '');
 });
 
-connect('stage', {
+const link = connect('stage', {
   onState(s) {
+    const inGame = s.phase === 'game';
+    document.body.classList.toggle('ingame', inGame);
+    game.hidden = !inGame;
+    if (inGame) {
+      game.innerHTML = stage(s, link.now());
+      announce(s.syna);
+      return;
+    }
     teams.innerHTML = s.teams.map((t) => {
       const ready = t.devices.some((d) => d.online);
       const status = ready ? 'Redo' : t.devices.length ? 'Mobilen har tappat kontakten' : 'Väntar på mobil';
@@ -42,6 +80,7 @@ connect('stage', {
     others.textContent = `Publik: ${s.audience.filter((d) => d.online).length}  ·  Kontrollant: ${judge}`;
   },
 });
+runClocks(link.now);
 </script>
 </body>
 </html>

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
-import { newRoom, addDevice, apply, viewFor, prune, isValidRoom } from './room.js';
+import { newRoom, addDevice, apply, viewFor, prune, isValidRoom, normalize, tick } from './room.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC = path.join(ROOT, 'public');
@@ -26,7 +26,7 @@ const MAX_DEVICES = 300;
 function load(file) {
   try {
     const room = JSON.parse(readFileSync(file, 'utf8'));
-    if (isValidRoom(room)) return room;
+    if (isValidRoom(room)) return normalize(room);
   } catch { /* ingen sparad kväll: börja om */ }
   return newRoom();
 }
@@ -118,7 +118,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
 
       const c = conns.get(ws);
       if (!c) return;
-      const err = apply(room, c.token, m, c.isAdmin);
+      const err = apply(room, c.token, m, c.isAdmin, Date.now());
       if (err) return send(ws, { t: 'error', error: err });
       changed();
     });
@@ -133,6 +133,9 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
     }
   }, 15000);
 
+  // Spelets klocka: när tiden för ett uppdrag har gått ut går servern själv vidare.
+  const clock = setInterval(() => { if (tick(room, Date.now())) changed(); }, 250);
+
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, resolve);
@@ -143,6 +146,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
     pin,
     async close() {
       clearInterval(beat);
+      clearInterval(clock);
       clearTimeout(saveTimer);
       for (const ws of wss.clients) ws.terminate();
       conns.clear();

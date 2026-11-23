@@ -10,7 +10,8 @@
 <body class="admin">
 <main id="app"><p class="muted">Ansluter …</p></main>
 <script type="module">
-import { connect, esc, store } from '/common.js';
+import { connect, esc, store, runClocks } from '/common.js';
+import { admin as gamePanel, action } from '/syna.js';
 
 const app = document.getElementById('app');
 let state = null;
@@ -23,6 +24,7 @@ const link = connect('admin', {
   onDenied() { denied = true; state = null; render(); },
   onError(e) { error = e; render(); },
 });
+runClocks(link.now);
 
 const devices = (list, label = '') => list.map((d) => `
   <div class="rowx">
@@ -45,15 +47,25 @@ function render() {
     return;
   }
   if (!state) return;
+  if (state.phase === 'game') {
+    app.innerHTML = `<h1>Värd</h1><div class="err">${esc(error)}</div>${gamePanel(state, link.now(), armed)}`;
+    return;
+  }
   app.innerHTML = `
     <h1>Värd</h1>
     <div class="err">${esc(error)}</div>
     <section class="card">
+      <h2>Starta Syna</h2>
+      <button class="btn big2" data-do="start">Starta spelet</button>
+      <button class="btn ghost" data-do="setMaterial" data-on="${state.settings.material ? 0 : 1}">Uppdrag med material: ${state.settings.material ? 'på' : 'av'}</button>
+      <p class="muted">Utan material väljs bara uppdrag som inte kräver några saker.</p>
+    </section>
+    <section class="card">
       <h2>Antal lag</h2>
       <div class="step">
-        <button class="btn" data-do="count" data-n="${state.teams.length - 1}">−</button>
+        <button class="btn" data-do="teams" data-n="${state.teams.length - 1}">−</button>
         <span>${state.teams.length}</span>
-        <button class="btn" data-do="count" data-n="${state.teams.length + 1}">+</button>
+        <button class="btn" data-do="teams" data-n="${state.teams.length + 1}">+</button>
       </div>
       <p class="muted">Två till sex lag. Tre eller fyra är grundläget.</p>
     </section>
@@ -89,12 +101,17 @@ app.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-do]');
   if (!b) return;
   error = '';
-  if (b.dataset.do === 'count') link.send({ t: 'setTeamCount', count: Number(b.dataset.n) });
-  else if (b.dataset.do === 'kick') link.send({ t: 'kick', device: b.dataset.device });
-  else if (b.dataset.do === 'reset') {
-    if (armed) link.send({ t: 'reset' });
+  const act = b.dataset.do;
+  if (act === 'teams') link.send({ t: 'setTeamCount', count: Number(b.dataset.n) });
+  else if (act === 'kick') link.send({ t: 'kick', device: b.dataset.device });
+  else if (act === 'reset' || act === 'endGame') {
+    // Två tryck krävs, så att kvällen inte försvinner av misstag.
+    if (armed) link.send({ t: act });
     armed = !armed;
     render();
+  } else {
+    const msg = action(b.dataset);
+    if (msg) link.send(msg);
   }
 });
 
