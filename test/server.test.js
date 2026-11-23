@@ -5,7 +5,9 @@ import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
+import QRCode from 'qrcode';
 import { startServer } from '../server/server.js';
+import { wifiPayload } from '../server/wifi.js';
 
 function client(port, hello) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
@@ -95,7 +97,7 @@ test('sidorna, QR-koden och hälsokollen svarar', async () => {
   const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), publicUrl: 'https://syna.example.org' });
   try {
     const get = (p) => fetch(`http://127.0.0.1:${app.port}${p}`);
-    for (const p of ['/', '/scen', '/admin']) {
+    for (const p of ['/', '/scen', '/admin', '/start']) {
       const r = await get(p);
       assert.equal(r.status, 200, p);
       assert.match(r.headers.get('content-type'), /text\/html/);
@@ -109,6 +111,67 @@ test('sidorna, QR-koden och hälsokollen svarar', async () => {
     assert.equal((await get('/finns-inte.html')).status, 404);
     assert.match(app.pin, /^\d{4}$/);
   } finally {
+    await app.close();
+  }
+});
+
+const qrFor = (text) => QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+
+test('startsidan länkar till storbilden och värdsidan, och QR-koden kan peka på värdsidan', async () => {
+  const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')) });
+  try {
+    const base = `http://127.0.0.1:${app.port}`;
+    const text = async (p) => (await fetch(base + p)).text();
+    const start = await text('/start');
+    for (const needle of ['href="/scen"', 'href="/admin"', 'src="/qr.svg?till=admin"', 'grep ADMIN_PIN']) assert.ok(start.includes(needle), needle);
+    assert.doesNotMatch(start, new RegExp(app.pin), 'pinkoden står inte på startsidan');
+    const scen = await text('/scen');
+    for (const needle of ['href="/start"', 'href="/admin"']) assert.ok(scen.includes(needle), needle);
+    assert.ok((await text('/admin')).includes('href="/start"'), 'inloggningen visar vägen till startsidan');
+
+    assert.equal(await text('/qr.svg'), await qrFor(base));
+    assert.equal(await text('/qr.svg?till=admin'), await qrFor(`${base}/admin`));
+    assert.equal(await text('/qr.svg?till=start'), await qrFor(`${base}/start`));
+    assert.equal(await text('/qr.svg?till=https://example.org'), await qrFor(base), 'koden pekar aldrig utanför spelet');
+  } finally {
+    await app.close();
+  }
+});
+
+test('wifi-kodens text följer formatet som mobilkameror läser', () => {
+  assert.equal(wifiPayload({ ssid: 'Syna-gast', password: 'julafton2026' }), 'WIFI:T:WPA;S:Syna-gast;P:julafton2026;;');
+  assert.equal(wifiPayload({ ssid: 'Gäst nät', password: 'p#ss $word' }), 'WIFI:T:WPA;S:Gäst nät;P:p#ss $word;;');
+  // Tecknen \ ; , " och : har en betydelse i formatet och föregås av ett bakstreck.
+  assert.equal(wifiPayload({ ssid: 'a;b', password: 'c\\d,e:f"g' }), 'WIFI:T:WPA;S:a\\;b;P:c\\\\d\\,e\\:f\\"g;;');
+  assert.equal(wifiPayload({ ssid: 'Öppet', password: '' }), 'WIFI:T:nopass;S:Öppet;;');
+});
+
+test('wifi-koden visas bara när ett gästnät är inställt, och aldrig genom en omvänd proxy', async () => {
+  const wifi = { ssid: 'Syna-gäst', password: 'p#ss $word; "x' };
+  const none = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')) });
+  const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), wifi });
+  try {
+    const off = `http://127.0.0.1:${none.port}`;
+    assert.deepEqual(await (await fetch(`${off}/wifi`)).json(), { ssid: null });
+    assert.equal((await fetch(`${off}/wifi.svg`)).status, 404);
+
+    const on = `http://127.0.0.1:${app.port}`;
+    assert.deepEqual(await (await fetch(`${on}/wifi`)).json(), { ssid: 'Syna-gäst' });
+    const code = await fetch(`${on}/wifi.svg`);
+    assert.equal(code.status, 200);
+    assert.equal(code.headers.get('cache-control'), 'no-store');
+    assert.equal(await code.text(), await qrFor('WIFI:T:WPA;S:Syna-gäst;P:p#ss $word\\; \\"x;;'));
+    assert.doesNotMatch(await (await fetch(`${on}/scen`)).text(), /p#ss/, 'lösenordet står inte i sidan');
+    assert.doesNotMatch(await (await fetch(`${on}/lage`)).text(), /p#ss|Syna-gäst/);
+
+    // En omvänd proxy lägger till rubriker om var anropet kom ifrån. Då lämnas varken nätets namn eller koden ut.
+    for (const header of ['X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Real-IP', 'Forwarded']) {
+      const headers = { [header]: header === 'Forwarded' ? 'for=203.0.113.7' : header === 'X-Forwarded-Proto' ? 'https' : '203.0.113.7' };
+      assert.deepEqual(await (await fetch(`${on}/wifi`, { headers })).json(), { ssid: null }, header);
+      assert.equal((await fetch(`${on}/wifi.svg`, { headers })).status, 404, header);
+    }
+  } finally {
+    await none.close();
     await app.close();
   }
 });
@@ -252,7 +315,7 @@ test('typsnittet följer med appen och används av alla sidor', async () => {
     const css = await (await fetch(`${base}/style.css`)).text();
     assert.match(css, /@font-face\{font-family:Syna;src:url\(\/inter\.woff2\) format\("woff2"\);font-weight:100 900;/);
     assert.match(css, /body\{[^}]*font-family:Syna,/);
-    for (const page of ['/', '/scen', '/admin']) {
+    for (const page of ['/', '/scen', '/admin', '/start']) {
       assert.match(await (await fetch(base + page)).text(), /<link rel="stylesheet" href="\/style\.css">/, page);
     }
     const license = await fetch(`${base}/inter-licens.txt`);

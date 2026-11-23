@@ -70,19 +70,23 @@ jobs:
           sudo chown 99:100 "$RUNNER_TEMP/data"
           docker run -d --name prov -p 8090:8080 --user 99:100 --read-only --tmpfs /tmp \
             --cap-drop ALL --security-opt no-new-privileges:true \
-            -v "$RUNNER_TEMP/data:/data" -e ADMIN_PIN=1234 boardgames:prov
+            -v "$RUNNER_TEMP/data:/data" -e ADMIN_PIN=1234 -e WIFI_SSID=Syna-gast -e WIFI_PASSWORD=julafton2026 boardgames:prov
           svarar() { for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8090/halsa && return 0; sleep 1; done; return 1; }
           svarar
           curl -fsS http://127.0.0.1:8090/ | grep -q 'id="app"'
           curl -fsS http://127.0.0.1:8090/scen | grep -q 'id="game"'
           curl -fsS -o /dev/null http://127.0.0.1:8090/admin
+          curl -fsS http://127.0.0.1:8090/start | grep -q 'href="/admin"'
           curl -fsS http://127.0.0.1:8090/qr.svg | grep -q '<svg'
+          curl -fsS http://127.0.0.1:8090/wifi | grep -q '"ssid":"Syna-gast"'
+          curl -fsS http://127.0.0.1:8090/wifi.svg | grep -q '<svg'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-For: 203.0.113.7' http://127.0.0.1:8090/wifi.svg)" = 404
           curl -fsS http://127.0.0.1:8090/lage | grep -q '"phase":"lobby"'
           test "$(curl -s -o /dev/null -w '%{http_code}' -m 2 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
             -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' http://127.0.0.1:8090/ws)" = 101
           docker exec prov node deploy/kontroll.js
           sudo test -s "$RUNNER_TEMP/data/room.json"
-          docker exec prov test -f /app/deploy/boardgames-installera-v1.sh
+          docker exec prov test -f /app/deploy/boardgames-installera-v2.sh
           docker exec prov test -f /app/deploy/boardgames-uppdatera-v1.sh
           docker exec prov test -f /app/deploy/compose.yaml
           # En värd startar spelet. Efter en omstart, som vid en uppdatering, ska spelet finnas kvar.
@@ -95,8 +99,54 @@ jobs:
           docker restart prov
           svarar
           curl -fsS http://127.0.0.1:8090/lage | grep -q '"phase":"game"'
+      # Installationsskriptet körs här mot riktig Docker och riktig Compose, med avbilden byggd ur källkoden.
+      # Det som provas är det som låtsas-dockern i testerna inte kan visa: att compose-filen går att starta
+      # och att värdena i .env kommer fram oförändrade till containern. Unraid och Compose Manager provas inte.
+      - name: Installationsskriptet mot riktig Docker och Compose
+        run: |
+          fel() { echo "::error::$*"; exit 1; }
+          # Tecken som Compose annars tolkar i .env: mellanslag, #, $, klamrar, citattecken och semikolon.
+          NAMN='Gäst nät'
+          LOSEN='p#ss $word; "x" ${y} &z=%!'
+          UT="$RUNNER_TEMP/installation.txt"
+          PROJ="$RUNNER_TEMP/unraid/projects/boardgames"
+          docker rm -f prov
+          docker network create docker_network
+          sudo mkdir -p /mnt/system_apps/appdata
+          kor() {
+            sudo env PROJ="$PROJ" SKRIPTKATALOG="$RUNNER_TEMP/unraid/scripts" CRONFIL="$RUNNER_TEMP/unraid/boardgames.cron" \
+              KALLA="$PWD" PORT=8090 DRYRUN=false "$@" bash deploy/boardgames-installera-v2.sh > "$UT" 2>&1 \
+              || { cat "$UT"; fel "installationen misslyckades: $(grep -E 'FEL|Avbryter|misslyckades|Kunde inte' "$UT" | head -4 | tr '\n' ' ')"; }
+            cat "$UT"
+          }
+          har() { [ "$(docker exec boardgames printenv "$1")" = "$2" ] || fel "$1 i containern är \"$(docker exec boardgames printenv "$1")\", väntat \"$2\""; }
+
+          kor PIN=246810 WIFI_NAMN="$NAMN" WIFI_LOSEN="$LOSEN"
+          grep -q '^Klart: 0 fel, ' "$UT" || fel "installationen: $(grep '^Klart' "$UT")"
+          ! grep -qF 'p#ss' "$UT" || fel "lösenordet skrivs ut av installationen"
+          grep -q '  OK      wifi-koden till nätet Gäst nät' "$UT" || fel "kontrollen i containern såg ingen wifi-kod"
+          grep -q '  OK      containern kör som 99:100' "$UT" || fel "containern kör inte som 99:100"
+          har WIFI_SSID "$NAMN"
+          har WIFI_PASSWORD "$LOSEN"
+          har ADMIN_PIN 246810
+          [ "$(sudo stat -c '%a' "$PROJ/.env")" = 600 ] || fel ".env har rättigheterna $(sudo stat -c '%a' "$PROJ/.env")"
+          curl -fsS http://127.0.0.1:8090/wifi | grep -q '"ssid":"Gäst nät"' || fel "/wifi visar inte nätets namn"
+          curl -fsS http://127.0.0.1:8090/wifi.svg | grep -q '<svg' || fel "/wifi.svg saknas"
+          webui="$(docker inspect -f '{{index .Config.Labels "net.unraid.docker.webui"}}' boardgames)"
+          [ "$webui" = 'http://[IP]:[PORT:8080]/start' ] || fel "WebUI-länken är \"$webui\""
+          sudo test -s /mnt/system_apps/appdata/boardgames/data/room.json || fel "läget hamnade inte på disk"
+
+          # En ny körning utan uppgifter lämnar gästnätet och pinkoden som de är.
+          kor
+          grep -q 'wifi-koden visar nätet Gäst nät (ur .env)' "$UT" || fel "den nya körningen kände inte igen gästnätet"
+          har WIFI_PASSWORD "$LOSEN"
+          har ADMIN_PIN 246810
+
+          kor WIFI=av
+          har WIFI_SSID ""
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/wifi.svg)" = 404 || fel "wifi-koden finns kvar efter WIFI=av"
       - if: failure()
-        run: docker logs prov || true
+        run: docker logs prov || docker logs boardgames || true
 
   image:
     needs: [test, layout]

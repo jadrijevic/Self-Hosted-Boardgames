@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { viewFor } from '../server/room.js';
 import { beginRound } from '../games/syna/game.js';
 import { taskById } from '../games/syna/tasks.js';
@@ -188,6 +188,18 @@ test('storbilden drar ihop raderna när fler än två lag har synat', () => {
   }
 });
 
+test('varje element som sidornas skript hämtar finns i sidan', () => {
+  const dir = new URL('../public/', import.meta.url);
+  const pages = readdirSync(dir).filter((f) => f.endsWith('.html'));
+  assert.deepEqual(pages.sort(), ['admin.html', 'index.html', 'scen.html', 'start.html']);
+  for (const page of pages) {
+    const html = readFileSync(new URL(page, dir), 'utf8');
+    const ids = [...html.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]);
+    assert.ok(ids.length > 0, page);
+    for (const id of ids) assert.ok(html.includes(`id="${id}"`), `${page} saknar elementet ${id}`);
+  }
+});
+
 test('ingen text på storbilden är mindre än 3,5 % av bildhöjden', () => {
   const css = readFileSync(new URL('../public/style.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(css, /\.stage\{--min:3\.5vh;/);
@@ -196,6 +208,6 @@ test('ingen text på storbilden är mindre än 3,5 % av bildhöjden', () => {
     const size = /font-size:([\d.]+)vh/.exec(body);
     if (size && Number(size[1]) < 3.5) small.push(selector.trim());
   }
-  // Knappen för husets röst är värdens egen och syns bara i lobbyn.
-  assert.deepEqual(small, ['.voice']);
+  // Värdens egna knappar syns bara i lobbyn.
+  assert.deepEqual(small, ['.ctl']);
 });

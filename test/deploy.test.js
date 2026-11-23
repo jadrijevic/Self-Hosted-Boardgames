@@ -14,11 +14,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import QRCode from 'qrcode';
 import { startServer } from '../server/server.js';
+import { wifiPayload } from '../server/wifi.js';
 
 const run = promisify(execFile);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const INSTALL = path.join(REPO, 'deploy/boardgames-installera-v1.sh');
+const INSTALL = path.join(REPO, 'deploy/boardgames-installera-v2.sh');
 const UPDATE = path.join(REPO, 'deploy/boardgames-uppdatera-v1.sh');
 const OLD = `sha256:${'a'.repeat(64)}`;
 const NEW = `sha256:${'b'.repeat(64)}`;
@@ -79,11 +81,18 @@ test('torrkörning och körning utan terminal ändrar ingenting', async (t) => {
   t.after(u.cleanup);
   const dry = await u.sh(INSTALL, { DRYRUN: 'true' });
   assert.equal(dry.code, 0);
-  assert.match(dry.out, /=== 2\. DET HÄR GÖRS ===/);
+  assert.match(dry.out, /=== 3\. DET HÄR GÖRS ===/);
   assert.match(dry.out, new RegExp(`port: ${u.port} mot LAN`));
+  assert.match(dry.out, /frågan om gästnätet ställs vid en riktig körning/);
   assert.match(dry.out, /Torrkörning: inget är ändrat\./);
+  const dryWifi = await u.sh(INSTALL, { DRYRUN: 'true', WIFI_NAMN: 'Syna-gast', PIN: '2468' });
+  assert.equal(dryWifi.code, 0);
+  assert.match(dryWifi.out, /lösenordet frågas efter vid en riktig körning/);
+  assert.match(dryWifi.out, /wifi-kod: nätet Syna-gast, med lösenordet i \.env/);
+  assert.match(dryWifi.out, /värdens pinkod: den du har valt/);
   const noTty = await u.sh(INSTALL);
   assert.equal(noTty.code, 0);
+  assert.match(noTty.out, /ingen terminal: frågan om gästnätet ställs nästa gång/);
   assert.match(noTty.out, /Ingen terminal: kör med DRYRUN=false för att utföra\./);
   assert.equal(existsSync(u.PROJ), false);
   assert.equal(existsSync(`${u.POOL_APPDATA}/boardgames`), false);
@@ -123,6 +132,10 @@ test('installation och uppdatering från början till slut', async (t) => {
     assert.match(envFile, /^BOARDGAMES_IMAGE=ghcr\.io\/jadrijevic\/self-hosted-boardgames:latest$/m);
     assert.match(envFile, new RegExp(`^BOARDGAMES_PORT=${u.port}$`, 'm'));
     assert.match(envFile, /^PUBLIC_URL=$/m);
+    // Utan terminal ställs ingen fråga om gästnätet, och den räknas inte som besvarad.
+    assert.doesNotMatch(envFile, /WIFI_/);
+    assert.match(r.out, /  \.\.      ingen wifi-kod är inställd/);
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${u.port}/wifi`)).json(), { ssid: null });
     pin = /^ADMIN_PIN=(\d{4})$/m.exec(envFile)?.[1];
     assert.ok(pin, 'pinkoden är fyra siffror');
     assert.doesNotMatch(r.out.split('Klart:')[0], new RegExp(`ADMIN_PIN=${pin}`), 'pinkoden skrivs inte ut under installationen');
@@ -133,7 +146,8 @@ test('installation och uppdatering från början till slut', async (t) => {
     assert.equal(await read(`${u.SKRIPTKATALOG}/boardgames-uppdatera-v1.sh`), await read(UPDATE));
     assert.match(await read(u.env.CRONFIL), new RegExp(`^40 \\* \\* \\* \\* /bin/bash ${u.SKRIPTKATALOG}/boardgames-uppdatera-v1\\.sh > /dev/null 2>&1$`, 'm'));
 
-    for (const line of ['servern svarar på port', 'sidan /scen svarar genom porten', 'WebSocket går fram genom porten', 'containern kör som 99:100', 'WebSocket: läget kom fram (4 lag, lobby)', `läget sparas i ${u.POOL_APPDATA}/boardgames/data`, 'värdens pinkod är fast']) {
+    assert.match(r.out, /^Start: {4}http:\/\/.+\/start /m);
+    for (const line of ['servern svarar på port', 'sidan /scen svarar genom porten', 'sidan /start svarar genom porten', 'startsidan', 'WebSocket går fram genom porten', 'containern kör som 99:100', 'WebSocket: läget kom fram (4 lag, lobby)', `läget sparas i ${u.POOL_APPDATA}/boardgames/data`, 'värdens pinkod är fast']) {
       assert.ok(r.out.includes(`  OK      ${line}`), `saknar: ${line}\n${r.out}`);
     }
     assert.equal((await u.lage()).phase, 'lobby');
@@ -150,6 +164,80 @@ test('installation och uppdatering från början till slut', async (t) => {
     assert.match(envFile, /^PUBLIC_URL=https:\/\/syna\.example\.org$/m);
     assert.equal(count(envFile, 'BOARDGAMES_PORT='), 1);
     assert.equal(await (await fetch(`http://127.0.0.1:${u.port}/adress`)).text(), 'https://syna.example.org');
+  });
+
+  await t.test('gästnätet och en egen pinkod hamnar i .env, och storbilden får wifi-koden', async () => {
+    const wifi = { ssid: 'Gäst nät', password: 'p#ss $word; "x' };
+    const r = await u.sh(INSTALL, { DRYRUN: 'false', WIFI_NAMN: wifi.ssid, WIFI_LOSEN: wifi.password, PIN: '246810' });
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /Klart: 0 fel, 0 varningar\./);
+    assert.ok(!r.out.includes(wifi.password) && !r.out.includes('p#ss'), 'lösenordet skrivs aldrig ut');
+    assert.match(r.out, /  OK      WIFI_PASSWORD=<dold>$/m);
+    assert.match(r.out, /  OK      ADMIN_PIN=<dold> \(uppdaterad\)$/m);
+    assert.match(r.out, /  OK      wifi-koden till nätet Gäst nät$/m);
+    assert.match(r.out, /^Mobiler: {2}skannar wifi-koden till Gäst nät på storbilden, och sedan spelets kod$/m);
+    assert.match(r.out, /pinkod: 246810$/m);
+
+    const envFile = await read(`${u.PROJ}/.env`);
+    assert.equal((await stat(`${u.PROJ}/.env`)).mode & 0o777, 0o600);
+    assert.ok(envFile.includes("\nWIFI_SSID='Gäst nät'\n"), envFile.replace(/PASSWORD=.*/, 'PASSWORD=…'));
+    assert.ok(envFile.includes(`\nWIFI_PASSWORD='${wifi.password}'\n`));
+    assert.match(envFile, /^ADMIN_PIN=246810$/m);
+    assert.equal(count(envFile, 'ADMIN_PIN='), 1);
+    pin = '246810';
+
+    const base = `http://127.0.0.1:${u.port}`;
+    assert.deepEqual(await (await fetch(`${base}/wifi`)).json(), { ssid: 'Gäst nät' });
+    const expected = await QRCode.toString(wifiPayload(wifi), { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+    assert.equal(await (await fetch(`${base}/wifi.svg`)).text(), expected, 'koden bär exakt det namn och lösenord som angavs');
+
+    // En ny körning utan uppgifter frågar inte igen och lämnar gästnätet och pinkoden som de är.
+    const again = await u.sh(INSTALL, { DRYRUN: 'false' });
+    assert.equal(again.code, 0, again.out);
+    assert.match(again.out, /  OK      wifi-koden visar nätet Gäst nät \(ur \.env\)$/m);
+    assert.equal(await read(`${u.PROJ}/.env`), envFile);
+    assert.deepEqual(await (await fetch(`${base}/wifi`)).json(), { ssid: 'Gäst nät' });
+  });
+
+  await t.test('fel i gästnätets uppgifter eller pinkoden avbryter innan något ändras', async () => {
+    const before = await read(`${u.PROJ}/.env`);
+    const ups = count(await u.calls(), ' up -d');
+    const cases = [
+      [{ WIFI_NAMN: 'Syna-gast', WIFI_LOSEN: 'kort' }, /lösenordet ska vara 8–63 tecken/],
+      [{ WIFI_NAMN: 'Syna-gast' }, /lösenordet ska vara 8–63 tecken/], // ingen terminal att fråga i
+      [{ WIFI_NAMN: 'Syna-gast', WIFI_LOSEN: "det'är-jul-igen" }, /får inte innehålla enkla citattecken eller bakstreck/],
+      [{ WIFI_NAMN: 'Syna\\gast', WIFI_LOSEN: 'julafton2026' }, /får inte innehålla enkla citattecken eller bakstreck/],
+      [{ WIFI_NAMN: 'x'.repeat(33), WIFI_LOSEN: 'julafton2026' }, /nätets namn är längre än 32 tecken/],
+      [{ WIFI: 'av', WIFI_NAMN: 'Syna-gast', WIFI_LOSEN: 'julafton2026' }, /WIFI=av och WIFI_NAMN går inte ihop/],
+      [{ WIFI: 'på' }, /WIFI kan bara vara av/],
+      [{ PIN: '12a4' }, /PIN ska bara innehålla siffror/],
+      [{ PIN: '123' }, /PIN ska vara 4–8 siffror/],
+      [{ PIN: '123456789' }, /PIN ska vara 4–8 siffror/],
+    ];
+    for (const [vars, message] of cases) {
+      const r = await u.sh(INSTALL, { DRYRUN: 'false', ...vars });
+      assert.equal(r.code, 1, JSON.stringify(vars));
+      assert.match(r.out, message);
+      assert.match(r.out, /Inget är ändrat\./);
+    }
+    assert.equal(await read(`${u.PROJ}/.env`), before);
+    assert.equal(count(await u.calls(), ' up -d'), ups);
+  });
+
+  await t.test('WIFI=av tar bort wifi-koden, och pinkoden ligger kvar', async () => {
+    const r = await u.sh(INSTALL, { DRYRUN: 'false', WIFI: 'av' });
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /wifi-kod: tas bort ur \.env/);
+    assert.match(r.out, /^Mobiler: {2}skannar QR-koden på storbilden$/m);
+    const envFile = await read(`${u.PROJ}/.env`);
+    assert.match(envFile, /^WIFI_SSID=$/m);
+    assert.match(envFile, /^WIFI_PASSWORD=$/m);
+    assert.match(envFile, /^ADMIN_PIN=246810$/m);
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${u.port}/wifi`)).json(), { ssid: null });
+    assert.equal((await fetch(`http://127.0.0.1:${u.port}/wifi.svg`)).status, 404);
+    // Frågan är besvarad: nästa körning säger hur koden slås på i stället för att fråga.
+    const again = await u.sh(INSTALL, { DRYRUN: 'true' });
+    assert.match(again.out, /ingen wifi-kod\. Slå på den med WIFI_NAMN=<nätets namn> framför bash/);
   });
 
   await t.test('uppdateringen: samma avbild ger ingen omstart', async () => {
@@ -236,11 +324,18 @@ test('installation och uppdatering från början till slut', async (t) => {
 
 test('kontrollen godkänner en fungerande server och underkänner en som inte svarar', async (t) => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'kontroll-'));
+  const wifiDir = await mkdtemp(path.join(os.tmpdir(), 'kontroll-'));
   const app = await startServer({ port: 0, dataDir, adminPin: '1234' });
-  t.after(async () => { await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const withWifi = await startServer({ port: 0, dataDir: wifiDir, adminPin: '1234', wifi: { ssid: 'Syna-gast', password: 'julafton2026' } });
+  t.after(async () => {
+    await app.close();
+    await withWifi.close();
+    await rm(dataDir, { recursive: true, force: true });
+    await rm(wifiDir, { recursive: true, force: true });
+  });
   const kontroll = async (env) => {
     try {
-      const { stdout } = await run('node', ['deploy/kontroll.js'], { cwd: REPO, env: { ...process.env, ADMIN_PIN: '', ...env } });
+      const { stdout } = await run('node', ['deploy/kontroll.js'], { cwd: REPO, env: { ...process.env, ADMIN_PIN: '', WIFI_SSID: '', ...env } });
       return { code: 0, out: stdout };
     } catch (e) {
       return { code: e.code, out: e.stdout };
@@ -248,8 +343,18 @@ test('kontrollen godkänner en fungerande server och underkänner en som inte sv
   };
   const good = await kontroll({ PORT: String(app.port), DATA_DIR: dataDir, ADMIN_PIN: '1234' });
   assert.equal(good.code, 0, good.out);
-  assert.equal(count(good.out, '  OK      '), 10);
+  assert.equal(count(good.out, '  OK      '), 11);
+  assert.match(good.out, /  \.\.      ingen wifi-kod är inställd \(WIFI_SSID\)/);
   assert.doesNotMatch(good.out, /FEL|VARNING/);
+
+  // Med ett gästnät inställt provas wifi-koden också. Är det inställt i .env men inte hos servern är något fel.
+  const wifi = await kontroll({ PORT: String(withWifi.port), DATA_DIR: wifiDir, ADMIN_PIN: '1234', WIFI_SSID: 'Syna-gast' });
+  assert.equal(wifi.code, 0, wifi.out);
+  assert.equal(count(wifi.out, '  OK      '), 12);
+  assert.match(wifi.out, /  OK      wifi-koden till nätet Syna-gast/);
+  const lost = await kontroll({ PORT: String(app.port), DATA_DIR: dataDir, ADMIN_PIN: '1234', WIFI_SSID: 'Syna-gast' });
+  assert.equal(lost.code, 1);
+  assert.match(lost.out, /FEL     wifi-koden till nätet Syna-gast: \/wifi\.svg svarade 404/);
 
   // Rätt server men fel katalog: läget hamnar inte där kontrollen letar.
   const wrongDir = await kontroll({ PORT: String(app.port), DATA_DIR: path.join(dataDir, 'finns-inte') });

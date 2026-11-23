@@ -8,12 +8,21 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body class="stage">
-<header><div class="brand">SYNA</div><div class="sub">Släktens egen spelshow</div><button class="voice" id="voice">Slå på husets röst</button></header>
+<header><div class="brand">SYNA</div><div class="sub">Släktens egen spelshow</div>
+  <nav class="ctls"><a class="ctl" href="/start" target="syna-start">Kom igång</a><a class="ctl" href="/admin" target="syna-vard" data-popup>Värd</a><button class="ctl" id="voice">Slå på husets röst</button></nav>
+</header>
 <main id="lobby">
   <section class="join">
-    <img src="/qr.svg" alt="QR-kod till spelet">
-    <div class="how">Skanna med mobilkameran</div>
-    <div class="url" id="url"></div>
+    <div class="code" id="wificode" hidden>
+      <img id="wifiqr" alt="QR-kod till wifi">
+      <div class="how">1. Wifi</div>
+      <div class="url" id="ssid"></div>
+    </div>
+    <div class="code">
+      <img src="/qr.svg" alt="QR-kod till spelet">
+      <div class="how" id="how">Skanna med mobilkameran</div>
+      <div class="url" id="url"></div>
+    </div>
   </section>
   <section>
     <div class="tiles" id="teams"></div>
@@ -23,7 +32,7 @@
 </main>
 <section id="game" hidden></section>
 <script type="module">
-import { connect, esc, runClocks } from '/common.js';
+import { connect, esc, popups, runClocks } from '/common.js';
 import { stage } from '/syna.js';
 
 const teams = document.getElementById('teams');
@@ -60,6 +69,16 @@ function announce(g) {
 fetch('/adress').then((r) => r.text()).then((u) => {
   document.getElementById('url').textContent = u.replace(/^https?:\/\//, '');
 });
+popups();
+// Med ett gästnät inställt visas två koder: först wifi, sedan spelet.
+fetch('/wifi').then((r) => r.json()).then(({ ssid }) => {
+  if (!ssid) return;
+  document.body.classList.add('wifi');
+  document.getElementById('wifiqr').src = '/wifi.svg';
+  document.getElementById('ssid').textContent = ssid;
+  document.getElementById('how').textContent = '2. Spelet';
+  document.getElementById('wificode').hidden = false;
+}).catch(() => {});
 
 const link = connect('stage', {
   onState(s) {
@@ -71,6 +90,7 @@ const link = connect('stage', {
       announce(s.syna);
       return;
     }
+    document.body.classList.toggle('few', s.teams.length <= 4); // få lag: lagen i en kolumn, mer plats åt koderna
     teams.innerHTML = s.teams.map((t) => {
       const ready = t.devices.some((d) => d.online);
       const status = ready ? 'Redo' : t.devices.length ? 'Tappat kontakten' : 'Väntar på mobil';

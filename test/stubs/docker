@@ -22,6 +22,7 @@ case "${1:-}" in
         fi
         PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
           ADMIN_PIN="$(envv ADMIN_PIN)" PUBLIC_URL="$(envv PUBLIC_URL)" \
+          WIFI_SSID="$(envv WIFI_SSID)" WIFI_PASSWORD="$(envv WIFI_PASSWORD)" \
           nohup node "$REPO/server/index.js" > "$STUB/server.log" 2>&1 &
         echo $! > "$STUB/pid"
         cp "$STUB/avbild-id" "$STUB/container-avbild"
@@ -53,6 +54,6 @@ case "${1:-}" in
   exec)
     # docker exec boardgames node deploy/kontroll.js
     cd "$REPO" && PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
-      ADMIN_PIN="$(envv ADMIN_PIN)" node deploy/kontroll.js ;;
+      ADMIN_PIN="$(envv ADMIN_PIN)" WIFI_SSID="$(envv WIFI_SSID)" node deploy/kontroll.js ;;
   *) exit 0 ;;
 esac
