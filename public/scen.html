@@ -73,7 +73,7 @@ const link = connect('stage', {
     }
     teams.innerHTML = s.teams.map((t) => {
       const ready = t.devices.some((d) => d.online);
-      const status = ready ? 'Redo' : t.devices.length ? 'Mobilen har tappat kontakten' : 'Väntar på mobil';
+      const status = ready ? 'Redo' : t.devices.length ? 'Tappat kontakten' : 'Väntar på mobil';
       return `<div class="tile${ready ? ' ready' : ''}" style="--c:${esc(t.color)}"><div class="n">Lag ${esc(t.name)}</div><div class="s">${status}</div></div>`;
     }).join('');
     const judge = s.judges.some((d) => d.online) ? 'klar' : 'saknas';

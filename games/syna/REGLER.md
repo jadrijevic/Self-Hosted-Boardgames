@@ -6,7 +6,8 @@ Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det hä
 
 - 12–16 personer i tre generationer, varav några barn på 6–9 år. Den yngsta läser inte säkert.
 - 25–30 minuter. Svenska. Ingen ska behöva läsa regler: husets röst läser upp.
-- En mobil per lag. Tv:n visar scenen. De som inte tävlar är publik eller kontrollant.
+- En mobil per lag. En storbild (tv eller projektor) visar scenen för alla. Mobilerna visar samma sak och räcker om storbilden saknas.
+- De som inte tävlar är publik eller kontrollant.
 - Spelet ska fungera utan jultema och med minimalt med material.
 
 ## En rond
