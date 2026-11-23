@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syna – scen</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="stage">
+<header><div class="brand">SYNA</div><div class="sub">Släktens egen spelshow</div></header>
+<main>
+  <section class="join">
+    <img src="/qr.svg" alt="QR-kod till spelet">
+    <div class="how">Skanna med mobilkameran</div>
+    <div class="url" id="url"></div>
+  </section>
+  <section>
+    <div class="tiles" id="teams"></div>
+    <div class="others" id="others"></div>
+    <div class="foot">Väntar på att värden startar.</div>
+  </section>
+</main>
+<script type="module">
+import { connect, esc } from '/common.js';
+
+const teams = document.getElementById('teams');
+const others = document.getElementById('others');
+
+fetch('/adress').then((r) => r.text()).then((u) => {
+  document.getElementById('url').textContent = u.replace(/^https?:\/\//, '');
+});
+
+connect('stage', {
+  onState(s) {
+    teams.innerHTML = s.teams.map((t) => {
+      const ready = t.devices.some((d) => d.online);
+      const status = ready ? 'Redo' : t.devices.length ? 'Mobilen har tappat kontakten' : 'Väntar på mobil';
+      return `<div class="tile${ready ? ' ready' : ''}" style="--c:${esc(t.color)}"><div class="n">Lag ${esc(t.name)}</div><div class="s">${status}</div></div>`;
+    }).join('');
+    const judge = s.judges.some((d) => d.online) ? 'klar' : 'saknas';
+    others.textContent = `Publik: ${s.audience.filter((d) => d.online).length}  ·  Kontrollant: ${judge}`;
+  },
+});
+</script>
+</body>
+</html>

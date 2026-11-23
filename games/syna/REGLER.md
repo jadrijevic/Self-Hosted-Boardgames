@@ -1,0 +1,70 @@
+# Syna – regler
+
+Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det här är reglerna som koden ska följa. Ronderna är inte byggda ännu, och inget är provspelat.
+
+## Förutsättningar
+
+- 12–16 personer i tre generationer, varav några barn på 6–9 år. Den yngsta läser inte säkert.
+- 25–30 minuter. Svenska. Ingen ska behöva läsa regler: husets röst läser upp.
+- En mobil per lag. Tv:n visar scenen. De som inte tävlar är publik eller kontrollant.
+- Spelet ska fungera utan jultema och med minimalt med material.
+
+## En rond
+
+1. Huset läser upp uppdraget.
+2. De två lag som duellerar lägger hemliga bud. Buden visas samtidigt.
+3. Lagen som tittar får syna ett av buden eller stå över.
+4. Båda lagen gör uppdraget samtidigt, 60–90 sekunder.
+5. Poängen visas.
+
+## Poäng
+
+- Klarat bud ger 1 poäng. Det djärvaste klarade budet i duellen ger 2 till. Missat bud ger 0.
+- Syna betyder "ni klarar inte ert bud". Rätt syn ger 2 poäng. Fel syn kostar 1 poäng, som går till det synade laget. Högst en syn per lag och rond.
+- Resultat över budet ger inga poäng men skrivs i rekordboken. Rekord avgör vid lika poäng.
+- Sista varvet ger dubbla poäng när antalet lag är jämnt.
+- Ställningen döljs under sista varvet och vinnaren avslöjas efter finalen.
+- Publiken satsar från egna mobiler, åt båda håll, på en egen poängtavla. Kontrollanten satsar inte.
+
+## Final
+
+Ett gemensamt uppdrag för alla, utan insats. Lyckas det öppnas lådan med något till alla, och sedan avslöjas vinnaren.
+
+## Schema och skalning
+
+Servern räknar ut vilka lag som möts så att alla får lika många dueller (`schedule.js`).
+
+| Lag | Ronder | Dueller per lag | Samma par möts | Dubbla poäng i sista varvet |
+|---|---|---|---|---|
+| 2 | 6 | 6 | 6 gånger | ja |
+| 3 | 6 | 4 | 2 gånger | nej |
+| 4 | 6 | 3 | 1 gång | ja |
+| 5 | 5 | 2 | högst 1 gång | nej |
+| 6 | 6 | 2 | högst 1 gång | ja |
+
+- Tre eller fyra lag är grundläget. Fler spelare ger större lag (2–5 per lag), inte fler lag.
+- Syn mellan lag kräver minst tre lag. Med två lag synar bara publiken.
+- Lika många på golvet: i en duell ställer båda lagen upp lika många, det mindre lagets antal. Övriga coachar.
+- Specialrollen går till lagets yngsta, oavsett ålder. Ett lag utan barn fungerar.
+- Hoppar ett lag av räknas resten av schemat om så att kvarvarande lag slutar på lika många dueller. Går det inte räknas poängen som snitt per duell.
+- Uppdragen delas ut i tre sorter (kropp, röst, huvud) så att varje lag får så olika sorter som möjligt.
+
+## Uppdrag
+
+- Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.
+- Den minsta ser, väljer eller bestämmer, men är aldrig ensam utförare under tidspress.
+- Cirka 20 uppdrag skrivs, 6 spelas. Ett uppdrag kan bytas med en knapp.
+- Utan material: Djuren, Viskningen, Släkten, Baklänges, Nynna, Minnet, Kedjan, Tystnaden.
+- Med material: Tornet (muggar), Ballongen, Blindparet (sockor och ögonbindel).
+- En mobil var i laget: Gubben (var och en ritar en kroppsdel, mobilen syr ihop).
+
+## Simuleringar
+
+Reglerna är avstämda mot simuleringar i `sim/` (Python, används inte när spelet körs).
+
+Antaganden: utfallet sprider 10–35 % kring lagets medel, lagets egen bedömning har 10 % brus och åskådarnas 15 %.
+
+- Poäng per duell blir 1,55–1,85 beroende på hur förutsägbart uppdraget är, oberoende av enhet.
+- Ett lag som är 25 % bättre på ett uppdrag får i snitt 2,25 mot 1,25.
+- Kloka budgivare budar cirka 85 % av vad de tror sig klara och missar 13–34 % av buden.
+- Syn lönar sig om laget missar oftare än en gång på tre.
