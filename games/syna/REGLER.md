@@ -62,7 +62,12 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 - Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.
 - Den minsta ser, väljer eller bestämmer, men är aldrig ensam utförare under tidspress.
 - Cirka 20 uppdrag ska finnas, 6 spelas. Värden kan byta uppdrag med en knapp före budgivningen.
-- Uppdragen står i `tasks.js`. Byggda utan material: Djuren, Nynna, Viskningen, Släkten, Kedjan, Alfabetet, Balansen, Tystnaden.
+- Uppdragen står i `tasks.js`. Utan material finns fem av varje sort:
+  - röst: Djuren, Nynna, Viskningen, Tungvrickaren, Sången
+  - huvud: Släkten, Kedjan, Alfabetet, Rimmet, Väskan
+  - kropp: Balansen, Tystnaden, Masken, Bokstäverna, Ryggen
+- En kväll spelar två uppdrag av varje sort. Med fem lag blir det fem ronder, och då ett av den ena sorten. Med fem att välja på blir kvällarna olika.
+- Ett uppdrag kan ha ämnen som lottas per rond och visas för alla (rimordet, tungvrickaren, ordningen i Tystnaden), eller lappar som bara kontrollanten ser (meningen i Viskningen, figurerna i Ryggen).
 - Byggda med material: Tornet (muggar), Ballongen, Blindparet (sockor och ögonbindlar).
 - Inte byggda, kräver mer av mobilen: Baklänges (ljud), Minnet (bilder), Gubben (var och en ritar en kroppsdel, mobilen syr ihop).
 

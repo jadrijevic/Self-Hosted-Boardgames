@@ -9,6 +9,9 @@
 // text      läses upp av husets röst
 // role      vad lagets yngsta gör. Den yngsta ser, väljer eller bestämmer,
 //           men är aldrig ensam utförare under tidspress.
+// topics    ett av dem lottas per rond och visas för alla, med rubriken topicLabel (annars Ämne)
+// prompts   lagen får var sitt, och bara kontrollanten ser dem
+// needs     materialet, för uppdrag med material: true
 
 export const TASKS = [
   {
@@ -38,6 +41,22 @@ export const TASKS = [
     ],
   },
   {
+    id: 'tungvrickaren', name: 'Tungvrickaren', kind: 'röst', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 45, unit: 'gånger', bid: { min: 2, max: 25, step: 1, start: 8 },
+    text: 'Säg rondens tungvrickare felfritt, en person i taget. Kontrollanten räknar varje gång det blir rätt. Hur många gånger hinner ni på 45 sekunder?',
+    role: 'Lagets yngsta pekar ut vem som står på tur.',
+    topicLabel: 'Tungvrickare',
+    topics: ['Sex laxar i en laxask', 'Packa pappas kappsäck', 'Flyg, fula fluga, flyg', 'Sju sjösjuka sjömän', 'Kvistfritt kvastskaft', 'Typiskt västkustskt'],
+  },
+  {
+    id: 'sangen', name: 'Sången', kind: 'röst', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 60, unit: 'sånger', bid: { min: 1, max: 10, step: 1, start: 3 },
+    text: 'Sjung en rad ur en sång där rondens ord finns med. Kontrollanten godkänner varje ny sång. Hur många sånger hinner ni på en minut?',
+    role: 'Lagets yngsta bestämmer vem som sjunger först.',
+    topicLabel: 'Ord',
+    topics: ['Sol', 'Hjärta', 'Natt', 'Sommar', 'Regn', 'Vän', 'Dans', 'Stjärna'],
+  },
+  {
     id: 'slakten', name: 'Släkten', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 45, unit: 'namn', bid: { min: 2, max: 25, step: 1, start: 8 },
     text: 'Säg namn på släktingar som inte är i rummet. Den äldsta i rummet godkänner. Hur många hinner ni på 45 sekunder?',
@@ -58,6 +77,20 @@ export const TASKS = [
     topics: ['Djur', 'Mat och dryck', 'Förnamn', 'Länder och städer'],
   },
   {
+    id: 'rimmet', name: 'Rimmet', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 45, unit: 'rim', bid: { min: 1, max: 15, step: 1, start: 5 },
+    text: 'Säg ord som rimmar på rondens ord, en person i taget, utan att upprepa. Hur många rim hinner ni på 45 sekunder?',
+    role: 'Lagets yngsta säger första rimmet.',
+    topicLabel: 'Rimord',
+    topics: ['Hatt', 'Mus', 'Sko', 'Bil', 'Sol', 'Kväll', 'Gran', 'Hand'],
+  },
+  {
+    id: 'vaskan', name: 'Väskan', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 90, unit: 'saker', bid: { min: 2, max: 12, step: 1, start: 5 },
+    text: 'Packa en väska i huvudet. Varje person räknar upp allt som ligger i väskan och lägger till en sak. Kontrollanten avbryter när någon glömmer. Hur många saker får ni med på 90 sekunder?',
+    role: 'Lagets yngsta lägger första saken i väskan.',
+  },
+  {
     id: 'balansen', name: 'Balansen', kind: 'kropp', material: false, mode: 'together', measure: 'time', direction: 'high',
     seconds: 60, unit: 'sekunder', bid: { min: 5, max: 60, step: 5, start: 20 },
     text: 'Alla som tävlar står på ett ben. Tiden stannar när första foten nuddar golvet. Hur många sekunder klarar ni?',
@@ -66,8 +99,34 @@ export const TASKS = [
   {
     id: 'tystnaden', name: 'Tystnaden', kind: 'kropp', material: false, mode: 'together', measure: 'time', direction: 'low',
     seconds: 90, unit: 'sekunder', bid: { min: 10, max: 90, step: 5, start: 45 },
-    text: 'Ställ er i ordning efter födelsedag, januari först, utan att prata. Kontrollanten stoppar tiden när ni står rätt. Hur snabbt klarar ni det?',
+    text: 'Ställ er i rondens ordning utan att prata. Kontrollanten stoppar tiden när ni står rätt. Hur snabbt klarar ni det?',
     role: 'Lagets yngsta är den enda som får prata.',
+    topicLabel: 'Ordning',
+    topics: ['Födelsedag, januari först', 'Skostorlek, minst först', 'Förnamn i bokstavsordning', 'Handens storlek, minst först'],
+  },
+  {
+    id: 'masken', name: 'Masken', kind: 'kropp', material: false, mode: 'together', measure: 'time', direction: 'high',
+    seconds: 60, unit: 'sekunder', bid: { min: 5, max: 60, step: 5, start: 20 },
+    text: 'Lagen står mitt emot varandra och håller masken. Miner och ljud är tillåtna, men ingen rör någon. Tiden stannar när första i laget ler eller skrattar. Hur många sekunder klarar ni?',
+    role: 'Lagets yngsta får skratta fritt och gör miner mot motståndarna.',
+  },
+  {
+    id: 'bokstaverna', name: 'Bokstäverna', kind: 'kropp', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 60, unit: 'bokstäver', bid: { min: 1, max: 15, step: 1, start: 5 },
+    text: 'Forma bokstäver med kropparna, en bokstav i taget och minst två personer per bokstav. Kontrollanten godkänner varje bokstav som går att läsa. Hur många hinner ni på en minut?',
+    role: 'Lagets yngsta väljer bokstav och bestämmer vem som gör vad.',
+  },
+  {
+    id: 'ryggen', name: 'Ryggen', kind: 'kropp', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    seconds: 90, unit: 'figurer', bid: { min: 1, max: 6, step: 1, start: 2 },
+    text: 'Kontrollanten viskar en figur till lagets yngsta. Figuren ritas vidare med fingret på ryggen genom hela laget, och den sista säger vad det är. Hur många figurer kommer rätt fram på 90 sekunder?',
+    role: 'Lagets yngsta får figuren först.',
+    prompts: [
+      'Hjärta · Sol · Hus · Fisk · Stjärna · Båt',
+      'Blomma · Måne · Träd · Kopp · Nyckel · Bil',
+      'Äpple · Moln · Stol · Orm · Krona · Flagga',
+      'Glass · Paraply · Kors · Ballong · Katt · Trappa',
+    ],
   },
   {
     id: 'tornet', name: 'Tornet', kind: 'kropp', material: true, mode: 'together', measure: 'count', direction: 'high',

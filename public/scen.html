@@ -61,7 +61,7 @@ function announce(g) {
   const key = `${g.round}:${g.task.id}:${g.step}`;
   if (key === spoken) return;
   spoken = key;
-  if (g.step === 'intro') say(`${g.task.name}. ${g.task.text} ${g.task.role}${g.topic ? ` Ämnet är: ${g.topic}.` : ''}`);
+  if (g.step === 'intro') say(`${g.task.name}. ${g.task.text} ${g.task.role}${g.topic ? ` ${g.task.topicLabel ?? 'Ämne'}: ${g.topic}.` : ''}`);
   else if (g.step === 'result') say('Tiden är ute.');
   else if (g.step === 'final') say(`Finalen. ${g.final.name}. ${g.final.text}`);
 }
