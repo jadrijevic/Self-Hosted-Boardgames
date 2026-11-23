@@ -1,10 +1,11 @@
 // Installations- och uppdateringsskripten körs här på riktigt, mot en låtsas-docker (test/stubs).
 // "docker compose up -d" startar den riktiga servern, så kontrollerna i skripten går mot en riktig server.
+// Frågorna i terminalen provas i en låtsasterminal (script från util-linux), där testet svarar som en människa.
 // Det som inte provas här är Docker och Unraid själva: avbilden, rättigheterna 99:100 och Compose Manager.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -76,6 +77,28 @@ async function unraid() {
 
 const count = (text, needle) => text.split(needle).length - 1;
 
+// Kör installationen i en terminal och svarar på frågorna i tur och ordning, var och en först när den har ställts.
+const hasTerminal = String(spawnSync('script', ['--version']).stdout).includes('util-linux');
+function inTerminal(u, answers, extra = {}) {
+  return new Promise((resolve) => {
+    const child = spawn('script', ['-qec', `bash ${INSTALL}`, '/dev/null'], { env: { ...u.env, ...extra } });
+    let out = '';
+    let from = 0;
+    let next = 0;
+    child.stdout.on('data', (data) => {
+      out += data;
+      if (next < answers.length && out.slice(from).includes(answers[next][0])) {
+        const reply = answers[next][1];
+        from = out.length;
+        next += 1;
+        setTimeout(() => child.stdin.write(`${reply}\n`), 150);
+      }
+    });
+    const timer = setTimeout(() => child.kill(), 60_000);
+    child.on('close', (code) => { clearTimeout(timer); resolve({ code, out: out.replace(/\r/g, ''), asked: next }); });
+  });
+}
+
 test('torrkörning och körning utan terminal ändrar ingenting', async (t) => {
   const u = await unraid();
   t.after(u.cleanup);
@@ -111,6 +134,58 @@ test('upptagen port och trasig adress avbryter innan något ändras', async (t) 
   assert.equal(bad.code, 1);
   assert.match(bad.out, /ADRESS ska börja med http/);
   assert.equal(existsSync(u.PROJ), false);
+});
+
+test('i en terminal frågar installationen efter gästnätet en gång, och lösenordet syns inte', { skip: !hasTerminal && 'kräver script från util-linux' }, async (t) => {
+  const NAME = 'Gästnätets namn till wifi-koden';
+  const PASSWORD = 'Lösenordet till Syna-gast (syns inte när du skriver)';
+  const GO = 'Kör? [j/N]';
+
+  await t.test('namn och lösenord skrivs in, och svaret nej på Kör? lämnar allt orört', async () => {
+    const u = await unraid();
+    t.after(u.cleanup);
+    const no = await inTerminal(u, [[NAME, 'Syna-gast'], [PASSWORD, 'julafton2026'], [GO, 'n']]);
+    assert.equal(no.asked, 3, no.out);
+    assert.match(no.out, /Inget är ändrat\./);
+    assert.equal(existsSync(u.PROJ), false);
+
+    const yes = await inTerminal(u, [[NAME, 'Syna-gast'], [PASSWORD, 'julafton2026'], [GO, 'j']]);
+    assert.equal(yes.code, 0, yes.out);
+    assert.equal(yes.asked, 3);
+    assert.ok(!yes.out.includes('julafton2026'), 'lösenordet syns varken när det skrivs eller efteråt');
+    assert.match(yes.out, /  OK      wifi-koden kommer att visa nätet Syna-gast/);
+    assert.match(yes.out, /Klart: 0 fel, 0 varningar\./);
+    const envFile = await read(`${u.PROJ}/.env`);
+    assert.match(envFile, /^WIFI_SSID=Syna-gast$/m);
+    assert.match(envFile, /^WIFI_PASSWORD=julafton2026$/m);
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${u.port}/wifi`)).json(), { ssid: 'Syna-gast' });
+
+    // Nästa körning frågar bara om den ska köra.
+    const again = await inTerminal(u, [[GO, 'n']]);
+    assert.equal(count(again.out, NAME), 0, again.out);
+    assert.match(again.out, /  OK      wifi-koden visar nätet Syna-gast \(ur \.env\)/);
+  });
+
+  await t.test('Enter hoppar över gästnätet, och frågan ställs inte igen', async () => {
+    const u = await unraid();
+    t.after(u.cleanup);
+    const first = await inTerminal(u, [[NAME, ''], [GO, 'j']]);
+    assert.equal(first.code, 0, first.out);
+    assert.equal(count(first.out, 'Lösenordet till'), 0);
+    assert.match(first.out, /ingen wifi-kod\. Slå på den senare med WIFI_NAMN=<nätets namn> framför bash/);
+    const envFile = await read(`${u.PROJ}/.env`);
+    assert.match(envFile, /^WIFI_SSID=$/m);
+    assert.match(envFile, /^WIFI_PASSWORD=$/m);
+    const again = await inTerminal(u, [[GO, 'n']]);
+    assert.equal(count(again.out, NAME), 0, again.out);
+    assert.match(again.out, /ingen wifi-kod\. Slå på den med WIFI_NAMN=<nätets namn> framför bash/);
+
+    // Byta nät senare: namnet anges, lösenordet frågas efter och ett för kort lösenord avbryter.
+    const short = await inTerminal(u, [['Lösenordet till Nytt-nat', 'kort']], { WIFI_NAMN: 'Nytt-nat' });
+    assert.equal(short.code, 1, short.out);
+    assert.match(short.out, /lösenordet ska vara 8–63 tecken/);
+    assert.equal(await read(`${u.PROJ}/.env`), envFile);
+  });
 });
 
 test('installation och uppdatering från början till slut', async (t) => {
