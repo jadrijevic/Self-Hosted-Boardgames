@@ -235,3 +235,31 @@ test('ett sparat läge som inte går att läsa läggs undan i stället för att 
     await app.close();
   }
 });
+
+test('typsnittet följer med appen och används av alla sidor', async () => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
+  const app = await startServer({ port: 0, dataDir, adminPin: '4321' });
+  try {
+    const base = `http://127.0.0.1:${app.port}`;
+    const font = await fetch(`${base}/inter.woff2`);
+    assert.equal(font.status, 200);
+    assert.equal(font.headers.get('content-type'), 'font/woff2');
+    assert.match(font.headers.get('cache-control'), /max-age=604800/);
+    const bytes = Buffer.from(await font.arrayBuffer());
+    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2');
+    assert.ok(bytes.length > 30_000 && bytes.length < 120_000, `oväntad storlek: ${bytes.length}`);
+
+    const css = await (await fetch(`${base}/style.css`)).text();
+    assert.match(css, /@font-face\{font-family:Syna;src:url\(\/inter\.woff2\) format\("woff2"\);font-weight:100 900;/);
+    assert.match(css, /body\{[^}]*font-family:Syna,/);
+    for (const page of ['/', '/scen', '/admin']) {
+      assert.match(await (await fetch(base + page)).text(), /<link rel="stylesheet" href="\/style\.css">/, page);
+    }
+    const license = await fetch(`${base}/inter-licens.txt`);
+    assert.equal(license.status, 200);
+    assert.match(await license.text(), /SIL OPEN FONT LICENSE Version 1\.1/);
+    assert.equal((await fetch(`${base}/style.css`)).headers.get('cache-control'), 'no-cache');
+  } finally {
+    await app.close();
+  }
+});

@@ -19,6 +19,8 @@ const TYPES = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
 };
 const KINDS = ['stage', 'player', 'admin'];
 const MAX_DEVICES = 300;
@@ -75,8 +77,9 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   }
 
   const joinUrl = (req) => publicUrl || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers.host}`;
+  // Sidorna hämtas alltid på nytt, så att en uppdatering syns direkt. Typsnittet ändras inte och får ligga kvar en vecka.
   const reply = (res, code, type, body) => {
-    res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-cache' });
+    res.writeHead(code, { 'Content-Type': type, 'Cache-Control': type === TYPES['.woff2'] ? 'public, max-age=604800' : 'no-cache' });
     res.end(body);
   };
 
@@ -95,7 +98,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
         return reply(res, 200, TYPES['.svg'], svg);
       }
       const name = PAGES[pathname] ?? pathname.slice(1);
-      if (!/^[a-z0-9-]+\.[a-z]+$/i.test(name)) return reply(res, 404, 'text/plain; charset=utf-8', 'Finns inte');
+      if (!/^[a-z0-9-]+\.[a-z0-9]+$/i.test(name)) return reply(res, 404, 'text/plain; charset=utf-8', 'Finns inte');
       const body = await readFile(path.join(PUBLIC, name));
       return reply(res, 200, TYPES[path.extname(name)] ?? 'application/octet-stream', body);
     } catch (e) {

@@ -5,6 +5,7 @@ Ritar varje läge från states.js på storbilden, mobilen och värdsidan och mä
 - storbilden: inget hamnar utanför bilden, inget innehåll är bredare än sin ruta och
   ingen text är mindre än 3,5 % av bildhöjden (i 16:9 och 16:10)
 - mobilen och värdsidan: ingenting sticker ut i sidled
+- alla sidor: typsnittet som följer med appen är laddat, så att måtten gäller på alla skärmar
 
 Kräver Python med Playwright och en Chrome eller Chromium. Körs från repots rot:
 
@@ -48,6 +49,9 @@ MEASURE = """
     // Knappen för husets röst är värdens egen och får vara mindre.
     if (text && !el.classList.contains('voice') && parseFloat(getComputedStyle(el).fontSize) < min) bad.add(name + ': text under 3,5 % av bildhöjden');
   }
+  // Måtten gäller bara om sidan ritas med typsnittet som följer med appen, inte med ett som råkar finnas här.
+  const own = [...document.fonts].some((f) => f.family.replace(/"/g, '') === 'Syna' && f.status === 'loaded');
+  if (!own || !getComputedStyle(document.body).fontFamily.startsWith('Syna')) bad.add('typsnittet som följer med appen är inte laddat');
   return { bad: [...bad], margin: big ? Math.round((margin / vh) * 1000) / 10 : null, height: document.documentElement.scrollHeight };
 }
 """
