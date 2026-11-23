@@ -1,6 +1,8 @@
 // Spelläget för en kväll: lag, enheter och fas.
 // Ren logik utan nätverk, så att den går att testa för sig.
 
+import { GAMES } from './games.js';
+
 export const TEAM_PRESETS = [
   { id: 'rod', name: 'Röd', color: '#E4572E' },
   { id: 'bla', name: 'Blå', color: '#2D7DD2' },
@@ -21,7 +23,17 @@ export function newRoom(teamCount = 4) {
     phase: 'lobby',
     teams: TEAM_PRESETS.slice(0, n).map((t) => ({ ...t })),
     devices: {}, // hemlig token -> { id, role, team, name }
+    settings: { material: false },
+    records: {}, // rekordboken: uppdrag -> { value, team, date }. Följer med mellan kvällarna.
   };
+}
+
+// Fyller på fält som saknas i ett läge som sparats av en äldre version.
+export function normalize(room) {
+  room.settings ??= { material: false };
+  room.records ??= {};
+  if (room.phase !== 'game' || !room[room.game]) room.phase = 'lobby';
+  return room;
 }
 
 export function addDevice(room, token, id) {
@@ -37,7 +49,7 @@ function unseat(dev) {
 }
 
 // Tar emot en avsikt från en enhet. Returnerar null om den gick igenom, annars en feltext.
-export function apply(room, token, msg, isAdmin = false) {
+export function apply(room, token, msg, isAdmin = false, now = Date.now(), rng = Math.random) {
   const dev = token ? room.devices[token] : null;
   switch (msg?.t) {
     case 'choose': {
@@ -88,10 +100,24 @@ export function apply(room, token, msg, isAdmin = false) {
     case 'reset': {
       if (!isAdmin) return 'bara värden får göra det';
       room.phase = 'lobby';
+      room[room.game] = null;
       for (const d of Object.values(room.devices)) unseat(d);
       return null;
     }
+    case 'setMaterial': {
+      if (!isAdmin) return 'bara värden får göra det';
+      if (room.phase !== 'lobby') return 'inställningen kan bara ändras i lobbyn';
+      room.settings.material = Boolean(msg.on);
+      return null;
+    }
+    case 'start': {
+      if (!isAdmin) return 'bara värden får starta';
+      if (room.phase !== 'lobby') return 'spelet är redan igång';
+      return GAMES[room.game].start(room, now, rng);
+    }
     default:
+      // Allt annat hör till spelet som pågår.
+      if (room.phase === 'game') return GAMES[room.game].apply(room, { device: dev, isAdmin }, msg, now, rng);
       return 'okänt meddelande';
   }
 }
@@ -113,7 +139,11 @@ export function viewFor(room, token, kind, online = new Set()) {
     audience: entries.filter(([, d]) => d.role === 'audience').map(pub),
     judges: entries.filter(([, d]) => d.role === 'judge').map(pub),
     me: me ? { id: me.id, role: me.role, team: me.team, name: me.name } : null,
+    settings: room.settings,
   };
+  if (room.phase === 'game') {
+    view[room.game] = GAMES[room.game].view(room, { device: me, isAdmin: kind === 'admin' });
+  }
   if (kind === 'admin') {
     view.unseated = entries.filter(([tok, d]) => !d.role && online.has(tok)).length;
   }
@@ -125,6 +155,11 @@ export function prune(room, online = new Set()) {
   for (const [tok, d] of Object.entries(room.devices)) {
     if (!d.role && !online.has(tok)) delete room.devices[tok];
   }
+}
+
+// Låter spelet som pågår sköta sin klocka. Returnerar true om läget ändrades.
+export function tick(room, now = Date.now()) {
+  return room.phase === 'game' ? GAMES[room.game].tick(room, now) : false;
 }
 
 export function isValidRoom(room) {

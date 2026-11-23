@@ -112,3 +112,39 @@ test('sidorna, QR-koden och hälsokollen svarar', async () => {
     await app.close();
   }
 });
+
+test('spelet startas av värden, och ett bud syns bara för det egna laget tills båda har låst', async () => {
+  const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), adminPin: '4321' });
+  try {
+    const phones = {};
+    for (const team of ['rod', 'bla', 'gron', 'gul']) {
+      phones[team] = client(app.port, { kind: 'player' });
+      await phones[team].next((m) => m.t === 'welcome');
+      phones[team].send({ t: 'choose', role: 'team', team });
+      await phones[team].next((m) => m.t === 'state' && m.state.me?.team === team);
+    }
+    const admin = client(app.port, { kind: 'admin', pin: '4321' });
+    await admin.next((m) => m.t === 'state');
+    phones.rod.send({ t: 'start' });
+    await phones.rod.next((m) => m.t === 'error');
+    admin.send({ t: 'start' });
+    const started = await admin.next((m) => m.t === 'state' && m.state.syna?.step === 'intro');
+    const [a, b] = started.state.syna.duel;
+    admin.send({ t: 'next' });
+    await phones[a].next((m) => m.t === 'state' && m.state.syna?.step === 'bid');
+
+    const { min, step } = started.state.syna.task.bid;
+    phones[a].send({ t: 'bid', value: min + step });
+    const own = await phones[a].next((m) => m.t === 'state' && m.state.syna.bids[a].value === min + step);
+    assert.equal(own.state.syna.bids[b].value, null);
+    phones[a].send({ t: 'lockBid' });
+    const other = await phones[b].next((m) => m.t === 'state' && m.state.syna.bids[a].locked);
+    assert.equal(other.state.syna.bids[a].value, null);
+    phones[b].send({ t: 'lockBid' });
+    const open = await phones[b].next((m) => m.t === 'state' && m.state.syna.step === 'call');
+    assert.equal(open.state.syna.bids[a].value, min + step);
+    for (const c of [...Object.values(phones), admin]) c.ws.close();
+  } finally {
+    await app.close();
+  }
+});

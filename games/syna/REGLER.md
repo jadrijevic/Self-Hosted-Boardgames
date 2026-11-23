@@ -1,6 +1,6 @@
 # Syna – regler
 
-Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det här är reglerna som koden ska följa. Ronderna är inte byggda ännu, och inget är provspelat.
+Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det här är reglerna som koden ska följa. Ronderna är byggda, men inget är provspelat med människor.
 
 ## Förutsättningar
 
@@ -14,21 +14,28 @@ Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det hä
 1. Huset läser upp uppdraget.
 2. De två lag som duellerar lägger hemliga bud. Buden visas samtidigt.
 3. Lagen som tittar får syna ett av buden eller stå över.
-4. Båda lagen gör uppdraget samtidigt, 60–90 sekunder.
-5. Poängen visas.
+4. Lagen gör uppdraget, 45–90 sekunder. Kontrollanten räknar eller stoppar tiden.
+5. Kontrollanten bekräftar resultatet och poängen visas.
+
+Vissa uppdrag görs av båda lagen samtidigt. I andra turas lagen om: då går det djärvaste budet sist, och lag två får inte upprepa något som lag ett har sagt.
 
 ## Poäng
 
 - Klarat bud ger 1 poäng. Det djärvaste klarade budet i duellen ger 2 till. Missat bud ger 0.
+- Klarar båda lagen samma bud delar de på bonusen och får 2 poäng var.
+- När uppdraget mäts i tid och kortast tid är bäst är det lägsta budet djärvast. Ett lag som inte kommer i mål har missat sitt bud.
 - Syna betyder "ni klarar inte ert bud". Rätt syn ger 2 poäng. Fel syn kostar 1 poäng, som går till det synade laget. Högst en syn per lag och rond.
 - Resultat över budet ger inga poäng men skrivs i rekordboken. Rekord avgör vid lika poäng.
-- Sista varvet ger dubbla poäng när antalet lag är jämnt.
+- Sista varvet ger dubbla poäng när antalet lag är jämnt. Det gäller allt i ronden, även syn.
+- Poängen kan bli negativ.
 - Ställningen döljs under sista varvet och vinnaren avslöjas efter finalen.
 - Publiken satsar från egna mobiler, åt båda håll, på en egen poängtavla. Kontrollanten satsar inte.
 
 ## Final
 
-Ett gemensamt uppdrag för alla, utan insats. Lyckas det öppnas lådan med något till alla, och sedan avslöjas vinnaren.
+Ett gemensamt uppdrag för alla, utan insats. Lyckas det öppnas lådan med något till alla, och sedan avslöjas vinnaren. Misslyckas det får släkten försöka igen.
+
+Finalen är Räkna till tjugo: hela släkten räknar högt, en person i taget, utan att bestämma vem som står på tur. Säger två personer samma tal samtidigt börjar man om från ett.
 
 ## Schema och skalning
 
@@ -53,10 +60,10 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 
 - Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.
 - Den minsta ser, väljer eller bestämmer, men är aldrig ensam utförare under tidspress.
-- Cirka 20 uppdrag skrivs, 6 spelas. Ett uppdrag kan bytas med en knapp.
-- Utan material: Djuren, Viskningen, Släkten, Baklänges, Nynna, Minnet, Kedjan, Tystnaden.
-- Med material: Tornet (muggar), Ballongen, Blindparet (sockor och ögonbindel).
-- En mobil var i laget: Gubben (var och en ritar en kroppsdel, mobilen syr ihop).
+- Cirka 20 uppdrag ska finnas, 6 spelas. Värden kan byta uppdrag med en knapp före budgivningen.
+- Uppdragen står i `tasks.js`. Byggda utan material: Djuren, Nynna, Viskningen, Släkten, Kedjan, Alfabetet, Balansen, Tystnaden.
+- Byggda med material: Tornet (muggar), Ballongen, Blindparet (sockor och ögonbindlar).
+- Inte byggda, kräver mer av mobilen: Baklänges (ljud), Minnet (bilder), Gubben (var och en ritar en kroppsdel, mobilen syr ihop).
 
 ## Simuleringar
 

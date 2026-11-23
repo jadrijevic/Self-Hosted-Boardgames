@@ -54,6 +54,15 @@ export function connect(kind, handlers = {}) {
   };
 }
 
+// Nedräkningar: element med data-ends räknar ner mot serverns sluttid.
+export function runClocks(now) {
+  setInterval(() => {
+    for (const el of document.querySelectorAll('[data-ends]')) {
+      el.textContent = Math.max(0, Math.ceil((Number(el.dataset.ends) - now()) / 1000));
+    }
+  }, 200);
+}
+
 // Håller skärmen tänd på lagmobilen. Låset släpps när man byter app, så det begärs igen.
 let awake = false;
 export function keepAwake() {

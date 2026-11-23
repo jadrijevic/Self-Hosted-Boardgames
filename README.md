@@ -4,7 +4,7 @@ Egna sällskapsspel som körs på en server hemma och spelas i mobilens webbläs
 
 ## Läget just nu
 
-Grunden finns: servern, synken mellan enheterna och lobbyn. Ronderna i Syna är inte byggda ännu.
+Syna går att spela från start till slut: lobby, sex ronder, final och resultat. Inget är provspelat med människor ännu.
 
 Det här fungerar:
 
@@ -13,9 +13,15 @@ Det här fungerar:
 - Värdvy bakom pinkod: antal lag (2–6), lagnamn, ta bort mobiler, nollställ (`/admin`).
 - En mobil som tappar kontakten eller laddas om får tillbaka sin plats.
 - Läget sparas på disk och överlever en omstart.
-- Schemaläggaren för Syna: vilka lag som möts vid 2–6 lag och när ett lag hoppar av.
+- Schemaläggaren för Syna: vilka lag som möts vid 2–6 lag.
+- Ronderna: uppdrag, hemliga bud, syn, nedräkning, resultat och poäng.
+- Kontrollanten räknar godkända eller stoppar tiden från sin mobil.
+- Värden går vidare mellan stegen, kan byta uppdrag och kan lägga bud eller syna åt ett lag som saknar mobil.
+- Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
+- Rekordboken: bästa resultat per uppdrag sparas mellan kvällarna.
+- Husets röst på tv-sidan läser upp uppdraget med webbläsarens talsyntes. Den slås på med knappen i lobbyn.
 
-Nästa steg är ronderna (bud, syn, tid, poäng), uppdragen, finalen och rekordboken. Reglerna står i [games/syna/REGLER.md](games/syna/REGLER.md).
+Inte byggt ännu: publikens satsningar, omplanering när ett lag hoppar av mitt i spelet, uppdragen Baklänges, Minnet och Gubben, en egen vy för rekordboken och ett installationsskript för Unraid. Reglerna står i [games/syna/REGLER.md](games/syna/REGLER.md).
 
 ## Så hänger det ihop
 
@@ -24,7 +30,7 @@ Servern äger hela spelläget. Mobilerna skickar avsikter över en WebSocket ("v
 | Mapp | Innehåll |
 |---|---|
 | `server/` | Webbserver, WebSocket-synk och spelläget för kvällen (`room.js`). Delas av alla spel. |
-| `games/syna/` | Det som bara gäller Syna: regler, schemaläggare, simuleringar. |
+| `games/syna/` | Det som bara gäller Syna: regler, spelmotor, uppdrag, schemaläggare, simuleringar. |
 | `public/` | Sidorna för mobil, tv och värd. Ren HTML och JavaScript, inget byggsteg. |
 | `test/` | Tester som körs med `npm test`. |
 
@@ -68,4 +74,4 @@ Mikrofon och skärmlås i mobilen kräver https. Det löses med en omvänd proxy
 npm test
 ```
 
-Testerna täcker spelläget, schemaläggaren och ett prov med riktiga WebSocket-klienter mot en riktig server.
+Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll) och prov med riktiga WebSocket-klienter mot en riktig server.

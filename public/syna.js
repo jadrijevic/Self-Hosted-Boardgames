@@ -1,0 +1,281 @@
+// Vyerna för Syna under spelet: tv, mobil, kontrollant och värd.
+// Varje funktion tar hela läget och ger tillbaka HTML. Knappar bär sin avsikt i data-do.
+
+import { esc } from '/common.js';
+
+const T = (s, id) => s.teams.find((t) => t.id === id);
+const lag = (s, id) => `Lag ${esc(T(s, id)?.name)}`;
+const col = (s, id) => esc(T(s, id)?.color ?? '#1B2430');
+const fmt = (n) => (n == null ? '–' : String(n).replace('.', ','));
+const sign = (n) => (n > 0 ? `+${fmt(n)}` : fmt(n).replace('-', '−'));
+const secs = (g, now) => Math.max(0, Math.ceil((g.endsAt - now) / 1000));
+const clock = (g, now) => `<div class="clock" data-ends="${g.endsAt}">${secs(g, now)}</div>`;
+
+// Gör om en knapps data-attribut till ett meddelande till servern.
+export function action(d) {
+  switch (d.do) {
+    case 'bid': return { t: 'bid', value: Number(d.v), team: d.team };
+    case 'lockBid': return { t: 'lockBid', team: d.team };
+    case 'call': return { t: 'call', target: d.target, team: d.team };
+    case 'count': return { t: 'count', team: d.team, delta: Number(d.delta) };
+    case 'stop': return { t: 'stop', team: d.team };
+    case 'setResult': return { t: 'setResult', team: d.team, value: Number(d.v) };
+    case 'finalResult': return { t: 'finalResult', success: d.ok === '1' };
+    case 'setMaterial': return { t: 'setMaterial', on: d.on === '1' };
+    case 'next': case 'swapTask': case 'start': case 'endGame': return { t: d.do };
+    default: return null;
+  }
+}
+
+function result(g, t) {
+  const r = g.results[t];
+  if (r == null) return g.task.measure === 'time' ? 'inte i mål' : '0';
+  return `${fmt(r)} ${esc(g.task.unit)}`;
+}
+
+function live(g, t) {
+  const r = g.results[t];
+  if (g.task.measure === 'count') return r == null ? '–' : fmt(r);
+  if (r != null) return `${fmt(r)} s`;
+  return g.performing.includes(t) ? 'tiden går' : '–';
+}
+
+function recordLine(g) {
+  if (!g.record) return 'Inget släktrekord ännu. Det sätts i kväll.';
+  return `Släktrekord: ${fmt(g.record.value)} ${esc(g.task.unit)}, Lag ${esc(g.record.team)} ${esc(g.record.date)}`;
+}
+
+function callers(s, g, t) {
+  const who = g.watchers.filter((w) => g.calls[w] === t);
+  return who.length ? `<div class="stamp">Synad av ${who.map((w) => lag(s, w)).join(' och ')}</div>` : '';
+}
+
+function scoreboard(s, g) {
+  if (!g.scores) return '<p class="hiddenscore">Ställningen är dold till efter finalen.</p>';
+  const rows = [...s.teams].sort((x, y) => g.scores[y.id] - g.scores[x.id]);
+  return `<div class="board">${rows.map((t) => `<div class="brow" style="--c:${esc(t.color)}"><span>Lag ${esc(t.name)}</span><b>${fmt(g.scores[t.id])}</b></div>`).join('')}</div>`;
+}
+
+function roundRows(s, g) {
+  const [a, b] = g.duel;
+  const duel = [a, b].map((t) => `
+    <div class="rrow" style="--c:${col(s, t)}">
+      <span class="rn">${lag(s, t)}</span>
+      <span class="rd">bud ${fmt(g.bids[t].value)} · ${g.made[t] ? 'klarade' : 'missade'} (${result(g, t)})</span>
+      <b class="${g.points[t] > 0 ? 'pos' : ''}">${sign(g.points[t])}</b>
+    </div>`).join('');
+  const calls = g.watchers.filter((w) => g.calls[w] && g.calls[w] !== 'pass').map((w) => `
+    <div class="rrow" style="--c:${col(s, w)}">
+      <span class="rn">${lag(s, w)}</span>
+      <span class="rd">synade ${lag(s, g.calls[w])}: ${g.made[g.calls[w]] ? 'fel' : 'rätt'}</span>
+      <b class="${g.points[w] > 0 ? 'pos' : 'neg'}">${sign(g.points[w])}</b>
+    </div>`).join('');
+  const rec = g.newRecord ? `<div class="newrec">Nytt släktrekord: ${lag(s, g.newRecord)}, ${result(g, g.newRecord)}</div>` : '';
+  return duel + calls + rec;
+}
+
+function standings(s, g) {
+  return `<div class="board">${g.standings.map((r) => `<div class="brow" style="--c:${col(s, r.team)}"><span>${r.place}. ${lag(s, r.team)}</span><b>${fmt(r.score)}</b></div>`).join('')}</div>`;
+}
+
+/* ---------------- tv ---------------- */
+
+export function stage(s, now) {
+  const g = s.syna;
+  const task = g.task;
+  const [a, b] = g.duel;
+  if (g.step === 'final') {
+    return `<div class="ghead"><span>Finalen</span></div>
+      <div class="taskbig">${esc(g.final.name)}</div>
+      <p class="tasktext">${esc(g.final.text)}</p>
+      <p class="vs">${g.final.tries ? 'Försök igen. Ni klarar det.' : 'Alla tillsammans. Ställningen är dold tills ni har klarat det.'}</p>`;
+  }
+  if (g.step === 'end') {
+    const first = g.standings.filter((r) => r.place === 1);
+    return `<div class="ghead"><span>Kvällens resultat</span></div>
+      <div class="taskbig">${first.map((r) => lag(s, r.team)).join(' och ')} vinner</div>
+      ${standings(s, g)}`;
+  }
+  const head = `<div class="ghead"><span>Rond ${g.round + 1} av ${g.rounds}</span>${g.step === 'intro' ? '' : `<span class="tn">${esc(task.name)}</span>`}${g.double ? '<span class="pill hot">Dubbla poäng</span>' : ''}</div>`;
+  const tiles = (inner) => `<div class="duel">${[a, b].map((t) => `<div class="dt${g.step === 'play' && !g.performing.includes(t) ? ' dim' : ''}" style="--c:${col(s, t)}"><div class="dn">${lag(s, t)}</div>${inner(t)}</div>`).join('')}</div>`;
+  const bid = (t) => `<div class="dv">${fmt(g.bids[t].value)}</div><div class="ds">${esc(task.unit)}</div>`;
+  switch (g.step) {
+    case 'intro': return `${head}
+      <div class="taskbig">${esc(task.name)}</div>
+      <p class="tasktext">${esc(task.text)}</p>
+      ${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+      <div class="pills"><span class="pill role">${esc(task.role)}</span>${task.needs ? `<span class="pill">Material: ${esc(task.needs)}</span>` : ''}${task.mode === 'turns' ? '<span class="pill">Ett lag i taget. Lag två får inte upprepa lag ett.</span>' : ''}</div>
+      <p class="vs">${lag(s, a)} mot ${lag(s, b)}</p>
+      <p class="rec">${recordLine(g)}</p>`;
+    case 'bid': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+      ${tiles((t) => `<div class="dv small">${g.bids[t].locked ? 'Låst' : 'Budar …'}</div>`)}
+      <p class="foot2">Buden visas när båda lagen har låst.</p>`;
+    case 'call': return `${head}${tiles(bid)}
+      <p class="foot2">${g.watchers.map((w) => `${lag(s, w)} ${g.calls[w] ? 'har bestämt sig' : 'funderar …'}`).join(' · ')}</p>`;
+    case 'ready': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+      ${tiles((t) => bid(t) + callers(s, g, t))}
+      <p class="foot2">${task.mode === 'turns' ? `${lag(s, g.order[g.turn])} står på tur.` : 'Båda lagen samtidigt.'} Kontrollanten startar tiden.</p>`;
+    case 'play': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}${clock(g, now)}
+      ${tiles((t) => `<div class="dv">${live(g, t)}</div><div class="ds">bud ${fmt(g.bids[t].value)} ${esc(task.unit)}</div>${callers(s, g, t)}`)}`;
+    case 'result': return `${head}<p class="over">Tiden är ute</p>
+      ${tiles((t) => `<div class="dv small">${result(g, t)}</div><div class="ds">bud ${fmt(g.bids[t].value)} ${esc(task.unit)}</div>${callers(s, g, t)}`)}
+      <p class="foot2">Kontrollanten bekräftar resultatet.</p>`;
+    case 'score': return `${head}<div class="rrows">${roundRows(s, g)}</div>${scoreboard(s, g)}`;
+    default: return head;
+  }
+}
+
+/* ---------------- kontrollant (och värd) ---------------- */
+
+export function judgePanel(s, now) {
+  const g = s.syna;
+  const task = g.task;
+  const [a, b] = g.duel;
+  const note = (t) => (g.notes ? `<p class="note">Viska till ${lag(s, t)}s yngsta:<br><b>${esc(g.notes[t])}</b></p>` : '');
+  if (g.step === 'ready') {
+    const next = task.mode === 'turns' ? g.order[g.turn] : null;
+    return `<section class="jbox">${next ? `<p class="lbl">${lag(s, next)} står på tur</p>${note(next)}` : '<p class="lbl">Båda lagen samtidigt</p>'}
+      <button class="go" data-do="next">Starta tiden</button></section>`;
+  }
+  if (g.step === 'play') {
+    return `<section class="jbox">${clock(g, now)}${g.performing.map((t) => `
+      <div class="jteam" style="--c:${col(s, t)}"><div class="jn">${lag(s, t)} · bud ${fmt(g.bids[t].value)}</div>${note(t)}
+      ${task.measure === 'count'
+        ? `<div class="jcount"><button class="minus" data-do="count" data-team="${t}" data-delta="-1">−1</button><span>${fmt(g.results[t] ?? 0)}</span><button class="plus1" data-do="count" data-team="${t}" data-delta="1">+1</button></div>`
+        : (g.results[t] != null ? `<p class="lbl">Stoppad på ${fmt(g.results[t])} s</p>` : `<button class="plus1 wide" data-do="stop" data-team="${t}">${task.direction === 'low' ? 'Klara: stoppa tiden' : 'Stoppa tiden'}</button>`)}
+      </div>`).join('')}
+      <button class="ghostbtn" data-do="next">Avbryt tiden</button></section>`;
+  }
+  if (g.step === 'result') {
+    return `<section class="jbox"><p class="lbl">Stämmer resultatet?</p>${[a, b].map((t) => {
+      const r = g.results[t];
+      const base = r ?? (task.measure === 'time' ? task.seconds : 0);
+      const adjust = task.measure === 'count'
+        ? `<button class="minus" data-do="count" data-team="${t}" data-delta="-1">−1</button><span>${fmt(r ?? 0)}</span><button class="minus" data-do="count" data-team="${t}" data-delta="1">+1</button>`
+        : `<button class="minus" data-do="setResult" data-team="${t}" data-v="${Math.max(0, base - 1)}">−1</button><span>${r == null ? 'inte i mål' : `${fmt(r)} s`}</span><button class="minus" data-do="setResult" data-team="${t}" data-v="${base + 1}">+1</button>`;
+      return `<div class="jteam" style="--c:${col(s, t)}"><div class="jn">${lag(s, t)} · bud ${fmt(g.bids[t].value)}</div><div class="jcount">${adjust}</div></div>`;
+    }).join('')}
+      <button class="go" data-do="next">Godkänn resultatet</button></section>`;
+  }
+  return '';
+}
+
+/* ---------------- mobil ---------------- */
+
+function bidPanel(s, t, forAdmin = false) {
+  const g = s.syna;
+  const { min, max, step } = g.task.bid;
+  const b = g.bids[t];
+  const team = forAdmin ? ` data-team="${t}"` : '';
+  if (b.locked) return `<section class="card2"><p class="lbl">${forAdmin ? lag(s, t) : 'Ert bud'} är låst</p><div class="num">${fmt(b.value)}</div><p class="unit">${esc(g.task.unit)}</p></section>`;
+  return `<section class="card2">
+    <p class="lbl">${forAdmin ? lag(s, t) : 'Ert bud'}</p>
+    <div class="stepper">
+      <button data-do="bid"${team} data-v="${Math.max(min, b.value - step)}">−</button>
+      <div class="num">${fmt(b.value)}</div>
+      <button data-do="bid"${team} data-v="${Math.min(max, b.value + step)}">+</button>
+    </div>
+    <p class="unit">${esc(g.task.unit)}${g.task.direction === 'low' ? ' · kortare tid är djärvare' : ''}</p>
+    <button class="go" data-do="lockBid"${team}>Lås budet</button>
+  </section>`;
+}
+
+function callPanel(s, t, forAdmin = false) {
+  const g = s.syna;
+  const mine = g.calls[t];
+  const team = forAdmin ? ` data-team="${t}"` : '';
+  const btn = (target, label) => `<button class="opt${mine === target ? ' on' : ''}" data-do="call"${team} data-target="${target}">${label}</button>`;
+  return `<section class="card2">
+    <p class="lbl">${forAdmin ? `${lag(s, t)}: ` : ''}Vem missar sitt bud?</p>
+    ${g.duel.map((d) => btn(d, `${lag(s, d)} missar <small>bud ${fmt(g.bids[d].value)} ${esc(g.task.unit)}</small>`)).join('')}
+    ${btn('pass', 'Stå över')}
+    <p class="unit">Rätt syn ger 2 poäng. Fel syn kostar 1.</p>
+  </section>`;
+}
+
+const info = (title, text = '') => `<section class="card2"><p class="lbl">${title}</p>${text ? `<p class="txt">${text}</p>` : ''}</section>`;
+
+export function player(s, now) {
+  const g = s.syna;
+  const me = s.me;
+  const task = g.task;
+  const mine = me.role === 'team' ? me.team : null;
+  const inDuel = g.duel.includes(mine);
+  const who = mine ? lag(s, mine) : me.role === 'judge' ? 'Kontrollant' : 'Publik';
+  const head = `<div class="phead" style="--c:${mine ? col(s, mine) : '#1B2430'}"><b>${who}</b><span>${['final', 'end'].includes(g.step) ? 'Finalen' : `Rond ${g.round + 1} av ${g.rounds} · ${esc(task.name)}`}</span></div>`;
+
+  if (g.step === 'final') return head + info(esc(g.final.name), esc(g.final.text));
+  if (g.step === 'end') {
+    const row = mine ? g.standings.find((r) => r.team === mine) : null;
+    return head + info(row ? `Ni kom på plats ${row.place} med ${fmt(row.score)} poäng` : 'Spelet är slut', 'Titta på tv:n.');
+  }
+  if (me.role === 'judge') {
+    return head + (judgePanel(s, now) || info('Inget att göra just nu', esc(task.text)));
+  }
+  switch (g.step) {
+    case 'intro':
+      return head + info(inDuel ? 'Ni tävlar i den här ronden' : mine ? 'Ni tittar i den här ronden' : esc(task.name), `${esc(task.text)}${inDuel ? `<br><br>${esc(task.role)}` : ''}`);
+    case 'bid':
+      return head + (inDuel ? bidPanel(s, mine) : info(`${lag(s, g.duel[0])} och ${lag(s, g.duel[1])} lägger sina bud`, mine ? 'Snart får ni syna.' : ''));
+    case 'call':
+      if (mine && !inDuel) return head + callPanel(s, mine);
+      return head + info('Buden är visade', g.duel.map((t) => `${lag(s, t)}: ${fmt(g.bids[t].value)} ${esc(task.unit)}`).join('<br>'));
+    case 'ready':
+      return head + info(task.mode === 'turns' ? `${lag(s, g.order[g.turn])} står på tur` : 'Båda lagen samtidigt', 'Kontrollanten startar tiden.');
+    case 'play':
+      return head + `<section class="card2">${clock(g, now)}${g.duel.map((t) => `<p class="txt">${lag(s, t)}: ${live(g, t)}</p>`).join('')}</section>`;
+    case 'result':
+      return head + info('Tiden är ute', g.duel.map((t) => `${lag(s, t)}: ${result(g, t)}`).join('<br>'));
+    case 'score': {
+      const p = mine ? g.points[mine] : null;
+      return head + info(p == null ? 'Ronden är klar' : `Ni fick ${sign(p)} poäng`, 'Titta på tv:n.');
+    }
+    default: return head;
+  }
+}
+
+/* ---------------- värd ---------------- */
+
+const NEXT = {
+  intro: 'Öppna budgivningen', bid: 'Visa buden nu', call: 'Stäng synen',
+  ready: 'Starta tiden', play: 'Avbryt tiden', result: 'Godkänn resultatet',
+};
+
+export function admin(s, now, armed) {
+  const g = s.syna;
+  const task = g.task;
+  const last = g.round + 1 === g.rounds;
+  let main = '';
+  if (g.step === 'final') {
+    main = `<button class="btn big2" data-do="finalResult" data-ok="1">Finalen lyckades</button>
+      <button class="btn ghost" data-do="finalResult" data-ok="0">Misslyckades, försök igen</button>`;
+  } else if (g.step === 'score') {
+    main = `<button class="btn big2" data-do="next">${last ? 'Till finalen' : 'Nästa rond'}</button>`;
+  } else if (g.step !== 'end' && !['ready', 'play', 'result'].includes(g.step)) {
+    main = `<button class="btn big2" data-do="next">${NEXT[g.step]}</button>`;
+  }
+  const fallback = g.step === 'bid'
+    ? `<section class="card"><h2>Lägg bud åt ett lag</h2>${g.duel.map((t) => bidPanel(s, t, true)).join('')}</section>`
+    : g.step === 'call'
+      ? `<section class="card"><h2>Syna åt ett lag</h2>${g.watchers.map((w) => callPanel(s, w, true)).join('')}</section>`
+      : '';
+  const scores = [...s.teams].sort((x, y) => g.scores[y.id] - g.scores[x.id]);
+  return `
+    <section class="card">
+      <h2>${['final', 'end'].includes(g.step) ? 'Finalen' : `Rond ${g.round + 1} av ${g.rounds}: ${esc(task.name)}`}</h2>
+      <p class="muted">${g.step === 'final' ? esc(g.final.text) : g.step === 'end' ? 'Spelet är slut.' : `${lag(s, g.duel[0])} mot ${lag(s, g.duel[1])}${g.topic ? ` · ämne: ${esc(g.topic)}` : ''}${task.needs ? ` · material: ${esc(task.needs)}` : ''}`}</p>
+      ${main}
+      ${g.step === 'intro' ? '<button class="btn ghost" data-do="swapTask">Byt uppdrag</button>' : ''}
+    </section>
+    ${judgePanel(s, now)}
+    ${fallback}
+    <section class="card">
+      <h2>Ställning${g.hidden ? ' (dold för alla andra)' : ''}</h2>
+      ${scores.map((t) => `<div class="rowx" style="--c:${esc(t.color)}"><div class="dot"></div><div class="grow">Lag ${esc(t.name)}</div><b>${fmt(g.scores[t.id])}</b></div>`).join('')}
+    </section>
+    <section class="card">
+      <h2>Avsluta</h2>
+      <button class="btn warn" data-do="endGame" data-arm="1">${armed ? 'Säker? Tryck igen' : 'Avsluta spelet'}</button>
+      <p class="muted">Tillbaka till lobbyn. Rekorden sparas.</p>
+    </section>`;
+}

@@ -1,0 +1,388 @@
+// Spelmotorn för Syna: ronder, bud, syn, tid och poäng. Ren logik utan nätverk.
+// Reglerna står i REGLER.md.
+//
+// En rond går genom stegen
+//   intro  -> bid -> call -> ready -> play -> result -> score
+// och efter sista ronden kommer final -> end.
+// Uppdrag där lagen turas om (mode: turns) går ready -> play två gånger.
+
+import { newSchedule, assignKinds, KINDS } from './schedule.js';
+import { TASKS, FINALS, taskById, finalById } from './tasks.js';
+
+const pick = (list, rng) => list[Math.floor(rng() * list.length)];
+const duelOf = (s) => s.schedule[s.round];
+const taskOf = (s) => taskById(s.tasks[s.round]);
+const boldness = (task, bid) => (task.direction === 'low' ? -bid : bid);
+const performing = (s, task) => (task.mode === 'turns' ? [s.order[s.turn]] : duelOf(s));
+
+function watchersOf(room) {
+  const duel = duelOf(room.syna);
+  return room.teams.map((t) => t.id).filter((id) => !duel.includes(id));
+}
+
+// Väljer ett uppdrag av rätt sort som inte redan är använt. Tar slut på sorten
+// tas ett annat oanvänt uppdrag, och i sista hand ett som redan spelats.
+export function pickTask(kind, allowMaterial, used, rng = Math.random) {
+  const free = TASKS.filter((t) => !used.includes(t.id));
+  const pools = [
+    free.filter((t) => t.kind === kind && (allowMaterial || !t.material)),
+    free.filter((t) => allowMaterial || !t.material),
+    free,
+    TASKS,
+  ];
+  return pick(pools.find((p) => p.length), rng).id;
+}
+
+// Poängen för en rond.
+//   Klarat bud: 1. Djärvaste klarade budet: 2 till (delas vid lika bud).
+//   Rätt syn: 2. Fel syn: -1, som går till det synade laget.
+export function scoreRound({ direction, bids, results, calls = {}, factor = 1 }) {
+  const teams = Object.keys(bids);
+  const made = {};
+  for (const t of teams) {
+    const r = results[t];
+    made[t] = r != null && (direction === 'low' ? r <= bids[t] : r >= bids[t]);
+  }
+  const points = Object.fromEntries([...teams, ...Object.keys(calls)].map((t) => [t, 0]));
+  const ok = teams.filter((t) => made[t]);
+  for (const t of ok) points[t] += 1;
+  if (ok.length) {
+    const bold = (t) => (direction === 'low' ? -bids[t] : bids[t]);
+    const top = Math.max(...ok.map(bold));
+    const boldest = ok.filter((t) => bold(t) === top);
+    for (const t of boldest) points[t] += 2 / boldest.length;
+  }
+  for (const [caller, target] of Object.entries(calls)) {
+    if (!(target in made)) continue; // stod över
+    if (made[target]) {
+      points[caller] -= 1;
+      points[target] += 1;
+    } else {
+      points[caller] += 2;
+    }
+  }
+  for (const t of Object.keys(points)) points[t] *= factor;
+  return { made, points };
+}
+
+export function beginRound(room, rng = Math.random) {
+  const s = room.syna;
+  const task = taskOf(s);
+  const [a, b] = duelOf(s);
+  Object.assign(s, {
+    step: 'intro',
+    bids: { [a]: { value: task.bid.start, locked: false }, [b]: { value: task.bid.start, locked: false } },
+    calls: {},
+    results: { [a]: null, [b]: null },
+    order: [a, b],
+    turn: 0,
+    startedAt: null,
+    endsAt: null,
+    made: null,
+    points: null,
+    newRecord: null,
+    topic: task.topics ? pick(task.topics, rng) : null,
+    notes: null,
+  });
+  if (task.prompts) {
+    const first = pick(task.prompts, rng);
+    s.notes = { [a]: first, [b]: pick(task.prompts.filter((p) => p !== first), rng) };
+  }
+}
+
+export function start(room, now = Date.now(), rng = Math.random) {
+  const ids = room.teams.map((t) => t.id);
+  if (ids.length < 2 || ids.length > 6) return 'Syna spelas med 2–6 lag';
+  const schedule = newSchedule(ids);
+  // Sorterna sprids jämnt mellan lagen, men vilken sort som hamnar i vilket varv slumpas per kväll.
+  const mixed = [...KINDS];
+  for (let i = mixed.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [mixed[i], mixed[j]] = [mixed[j], mixed[i]];
+  }
+  const kinds = assignKinds(schedule).map((k) => mixed[KINDS.indexOf(k)]);
+  const tasks = [];
+  for (const kind of kinds) tasks.push(pickTask(kind, Boolean(room.settings?.material), tasks, rng));
+  // Jämnt antal lag: i sista varvet tävlar alla lag en gång, och det ger dubbla poäng.
+  const lastLap = ids.length % 2 === 0 ? schedule.length - ids.length / 2 : null;
+  room.syna = {
+    schedule,
+    kinds,
+    tasks,
+    round: 0,
+    doubleFrom: lastLap,
+    hideFrom: lastLap ?? schedule.length - 1,
+    scores: Object.fromEntries(ids.map((id) => [id, 0])),
+    recordsSet: Object.fromEntries(ids.map((id) => [id, 0])),
+    final: { task: FINALS[0].id, tries: 0, success: null },
+  };
+  room.phase = 'game';
+  beginRound(room, rng);
+  return null;
+}
+
+function closeBids(room) {
+  const s = room.syna;
+  const task = taskOf(s);
+  const [a, b] = duelOf(s);
+  s.bids[a].locked = true;
+  s.bids[b].locked = true;
+  // Det djärvaste budet går sist när lagen turas om.
+  s.order = boldness(task, s.bids[a].value) <= boldness(task, s.bids[b].value) ? [a, b] : [b, a];
+  s.step = watchersOf(room).length ? 'call' : 'ready';
+}
+
+function startPlay(room, now) {
+  const s = room.syna;
+  const task = taskOf(s);
+  s.step = 'play';
+  s.startedAt = now;
+  s.endsAt = now + task.seconds * 1000;
+  for (const t of performing(s, task)) s.results[t] = task.measure === 'count' ? 0 : null;
+}
+
+function endPlay(room) {
+  const s = room.syna;
+  const task = taskOf(s);
+  // Stoppades aldrig klockan har laget hållit hela tiden (high) eller inte kommit i mål (low).
+  if (task.measure === 'time' && task.direction === 'high') {
+    for (const t of performing(s, task)) s.results[t] ??= task.seconds;
+  }
+  s.startedAt = null;
+  s.endsAt = null;
+  if (task.mode === 'turns' && s.turn === 0) {
+    s.turn = 1;
+    s.step = 'ready';
+  } else {
+    s.step = 'result';
+  }
+}
+
+function finishRound(room, now) {
+  const s = room.syna;
+  const task = taskOf(s);
+  const [a, b] = duelOf(s);
+  const factor = s.doubleFrom !== null && s.round >= s.doubleFrom ? 2 : 1;
+  const { made, points } = scoreRound({
+    direction: task.direction,
+    bids: { [a]: s.bids[a].value, [b]: s.bids[b].value },
+    results: s.results,
+    calls: s.calls,
+    factor,
+  });
+  s.made = made;
+  s.points = points;
+  for (const [t, p] of Object.entries(points)) s.scores[t] = (s.scores[t] ?? 0) + p;
+
+  // Rekordboken gäller resultatet, inte budet. Bara rondens bästa lag kan ta rekordet.
+  const better = (x, y) => (task.direction === 'low' ? x < y : x > y);
+  let best = null;
+  for (const t of [a, b]) {
+    if (s.results[t] != null && (best === null || better(s.results[t], s.results[best]))) best = t;
+  }
+  const old = room.records[task.id];
+  s.newRecord = null;
+  if (best && (!old || better(s.results[best], old.value))) {
+    room.records[task.id] = {
+      value: s.results[best],
+      team: room.teams.find((t) => t.id === best)?.name ?? best,
+      date: new Date(now).toISOString().slice(0, 10),
+    };
+    s.recordsSet[best] += 1;
+    s.newRecord = best;
+  }
+  s.step = 'score';
+}
+
+function advance(room, ctx, isJudge, now, rng) {
+  const s = room.syna;
+  const judgeSteps = ['ready', 'play', 'result'];
+  if (!ctx.isAdmin && !(isJudge && judgeSteps.includes(s.step))) return 'bara värden får gå vidare här';
+  switch (s.step) {
+    case 'intro': s.step = 'bid'; return null;
+    case 'bid': closeBids(room); return null;
+    case 'call':
+      for (const w of watchersOf(room)) s.calls[w] ??= 'pass';
+      s.step = 'ready';
+      return null;
+    case 'ready': startPlay(room, now); return null;
+    case 'play': endPlay(room); return null;
+    case 'result': finishRound(room, now); return null;
+    case 'score':
+      if (s.round + 1 < s.schedule.length) {
+        s.round += 1;
+        beginRound(room, rng);
+      } else {
+        s.step = 'final';
+      }
+      return null;
+    default: return 'det finns inget nästa steg';
+  }
+}
+
+// Tar emot en avsikt under spelet. ctx = { device, isAdmin }.
+// Värden får agera åt ett lag (msg.team), så att kvällen klarar sig om en mobil saknas.
+export function apply(room, ctx, msg, now = Date.now(), rng = Math.random) {
+  const s = room.syna;
+  if (!s) return 'inget spel pågår';
+  const task = taskOf(s);
+  const duel = duelOf(s);
+  const own = ctx.device?.role === 'team' ? ctx.device.team : null;
+  const team = ctx.isAdmin && msg.team ? msg.team : own;
+  const isJudge = ctx.isAdmin || ctx.device?.role === 'judge';
+
+  switch (msg.t) {
+    case 'bid':
+    case 'lockBid': {
+      if (s.step !== 'bid') return 'budgivningen är inte öppen';
+      if (!duel.includes(team)) return 'ert lag budar inte i den här ronden';
+      const bid = s.bids[team];
+      if (bid.locked) return 'budet är redan låst';
+      if (msg.t === 'bid') {
+        const v = Number(msg.value);
+        if (!Number.isFinite(v)) return 'ogiltigt bud';
+        bid.value = Math.min(task.bid.max, Math.max(task.bid.min, Math.round(v / task.bid.step) * task.bid.step));
+        return null;
+      }
+      bid.locked = true;
+      if (duel.every((t) => s.bids[t].locked)) closeBids(room);
+      return null;
+    }
+    case 'call': {
+      const watchers = watchersOf(room);
+      if (s.step !== 'call') return 'synen är inte öppen';
+      if (!watchers.includes(team)) return 'ert lag tittar inte i den här ronden';
+      if (msg.target !== 'pass' && !duel.includes(msg.target)) return 'okänt val';
+      s.calls[team] = msg.target;
+      if (watchers.every((w) => s.calls[w])) s.step = 'ready';
+      return null;
+    }
+    case 'count': {
+      if (!isJudge) return 'bara kontrollanten får räkna';
+      if (task.measure !== 'count' || !['play', 'result'].includes(s.step)) return 'det går inte att räkna nu';
+      if (!duel.includes(msg.team)) return 'okänt lag';
+      if (msg.delta !== 1 && msg.delta !== -1) return 'ogiltigt steg';
+      s.results[msg.team] = Math.max(0, (s.results[msg.team] ?? 0) + msg.delta);
+      return null;
+    }
+    case 'stop': {
+      if (!isJudge) return 'bara kontrollanten får stoppa tiden';
+      if (task.measure !== 'time' || s.step !== 'play') return 'det finns ingen tid att stoppa';
+      const active = performing(s, task);
+      if (!active.includes(msg.team)) return 'laget tävlar inte just nu';
+      if (s.results[msg.team] != null) return 'tiden är redan stoppad';
+      s.results[msg.team] = Math.round((now - s.startedAt) / 100) / 10;
+      if (active.every((t) => s.results[t] != null)) endPlay(room);
+      return null;
+    }
+    case 'setResult': {
+      if (!isJudge) return 'bara kontrollanten får ändra resultatet';
+      if (s.step !== 'result') return 'resultatet kan bara ändras efter tiden';
+      if (!duel.includes(msg.team)) return 'okänt lag';
+      const v = msg.value === null ? null : Number(msg.value);
+      if (v !== null && (!Number.isFinite(v) || v < 0)) return 'ogiltigt resultat';
+      s.results[msg.team] = v;
+      return null;
+    }
+    case 'next':
+      return advance(room, ctx, isJudge, now, rng);
+    case 'swapTask': {
+      if (!ctx.isAdmin) return 'bara värden får byta uppdrag';
+      if (s.step !== 'intro') return 'uppdraget kan bara bytas innan budgivningen';
+      s.tasks[s.round] = pickTask(s.kinds[s.round], Boolean(room.settings?.material), [...s.tasks], rng);
+      beginRound(room, rng);
+      return null;
+    }
+    case 'finalResult': {
+      if (!ctx.isAdmin) return 'bara värden avgör finalen';
+      if (s.step !== 'final') return 'finalen pågår inte';
+      if (msg.success) {
+        s.final.success = true;
+        s.step = 'end';
+      } else {
+        s.final.tries += 1;
+      }
+      return null;
+    }
+    case 'endGame': {
+      if (!ctx.isAdmin) return 'bara värden får avsluta';
+      room.phase = 'lobby';
+      room.syna = null;
+      return null;
+    }
+    default:
+      return 'okänt meddelande';
+  }
+}
+
+// Klockan: servern avslutar själv tiden när den gått ut.
+export function tick(room, now = Date.now()) {
+  const s = room.syna;
+  if (!s || s.step !== 'play' || now < s.endsAt) return false;
+  endPlay(room);
+  return true;
+}
+
+function standings(room) {
+  const s = room.syna;
+  const rows = room.teams.map((t) => ({ team: t.id, score: s.scores[t.id] ?? 0, records: s.recordsSet[t.id] ?? 0 }));
+  rows.sort((x, y) => y.score - x.score || y.records - x.records);
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    r.place = prev && prev.score === r.score && prev.records === r.records ? prev.place : i + 1;
+  });
+  return rows;
+}
+
+// Det en viss enhet får se av spelet. Här hålls buden hemliga tills båda är låsta,
+// synen tills alla har valt, och ställningen under sista varvet.
+export function view(room, ctx) {
+  const s = room.syna;
+  if (!s) return null;
+  const task = taskOf(s);
+  const duel = duelOf(s);
+  const watchers = watchersOf(room);
+  const own = ctx.device?.role === 'team' ? ctx.device.team : null;
+  const isJudge = ctx.isAdmin || ctx.device?.role === 'judge';
+  const bidsShown = !['intro', 'bid'].includes(s.step);
+  const callsShown = !['intro', 'bid', 'call'].includes(s.step);
+  const hidden = s.round >= s.hideFrom && s.step !== 'end';
+
+  const bids = {};
+  for (const t of duel) {
+    bids[t] = { locked: s.bids[t].locked, value: bidsShown || ctx.isAdmin || own === t ? s.bids[t].value : null };
+  }
+  const calls = {};
+  for (const w of watchers) {
+    const c = s.calls[w] ?? null;
+    calls[w] = callsShown || ctx.isAdmin || own === w ? c : (c ? 'hidden' : null);
+  }
+  const { prompts, topics, ...publicTask } = task;
+  const out = {
+    round: s.round,
+    rounds: s.schedule.length,
+    step: s.step,
+    duel,
+    watchers,
+    task: publicTask,
+    topic: s.topic,
+    double: s.doubleFrom !== null && s.round >= s.doubleFrom,
+    hidden,
+    bids,
+    calls,
+    order: s.order,
+    turn: s.turn,
+    performing: s.step === 'play' ? performing(s, task) : [],
+    endsAt: s.endsAt,
+    results: s.results,
+    made: s.made,
+    points: s.points,
+    newRecord: s.newRecord,
+    record: room.records[task.id] ?? null,
+    scores: hidden && !ctx.isAdmin ? null : s.scores,
+    final: { ...finalById(s.final.task), tries: s.final.tries, success: s.final.success },
+  };
+  if (isJudge && s.notes) out.notes = s.notes;
+  if (s.step === 'end') out.standings = standings(room);
+  return out;
+}
