@@ -16,11 +16,19 @@ import { admin as gamePanel, action } from '/syna.js';
 const app = document.getElementById('app');
 let state = null;
 let denied = false;
-let armed = false; // nollställning kräver två tryck
+let armed = ''; // det som kräver två tryck och väntar på det andra: reset, endGame eller undo
+let armedFor = ''; // läget som knappen gällde när den trycktes första gången
+const stepOf = (s) => JSON.stringify([s?.phase, s?.syna?.round, s?.syna?.step, s?.syna?.back]);
 let error = '';
 
 const link = connect('admin', {
-  onState(s) { state = s; denied = false; render(); },
+  onState(s) {
+    // Har spelet gått vidare sedan första trycket gäller det inte längre.
+    if (armed && stepOf(s) !== armedFor) armed = '';
+    state = s;
+    denied = false;
+    render();
+  },
   onDenied() { denied = true; state = null; render(); },
   onError(e) { error = e; render(); },
 });
@@ -84,7 +92,7 @@ function render() {
     </section>
     <section class="card">
       <h2>Börja om</h2>
-      <button class="btn warn" data-do="reset">${armed ? 'Säker? Tryck igen' : 'Nollställ kvällen'}</button>
+      <button class="btn warn" data-do="reset">${armed === 'reset' ? 'Säker? Tryck igen' : 'Nollställ kvällen'}</button>
       <p class="muted">Alla mobiler får välja lag på nytt.</p>
     </section>`;
 }
@@ -102,12 +110,15 @@ app.addEventListener('click', (e) => {
   if (!b) return;
   error = '';
   const act = b.dataset.do;
+  // Två tryck på samma knapp krävs för det som inte går att ta tillbaka. Ett tryck på något annat avbryter.
+  const twice = act === 'reset' || act === 'endGame' || (act === 'undo' && b.dataset.arm);
+  const confirmed = twice && armed === act;
+  armed = twice && !confirmed ? act : '';
+  armedFor = stepOf(state);
   if (act === 'teams') link.send({ t: 'setTeamCount', count: Number(b.dataset.n) });
   else if (act === 'kick') link.send({ t: 'kick', device: b.dataset.device });
-  else if (act === 'reset' || act === 'endGame') {
-    // Två tryck krävs, så att kvällen inte försvinner av misstag.
-    if (armed) link.send({ t: act });
-    armed = !armed;
+  else if (twice) {
+    if (confirmed) link.send(act === 'undo' ? action(b.dataset) : { t: act });
     render();
   } else {
     const msg = action(b.dataset);

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { newRoom, addDevice, apply, viewFor, tick } from '../server/room.js';
 import { seeded } from './helpers.js';
 
-const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
+const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
 const ODD = [undefined, null, 0, -1, 1, 2, 7, 1e9, -1e9, NaN, Infinity, 0.5, '', 'x', 'rod', 'bla', 'gron', 'gul', 'lila', 'rosa', 'pass', 'team', 'audience', 'judge', '__proto__', 'constructor', 'hasOwnProperty', 'toString', [], [1], {}, { a: 1 }, true, false, 'a'.repeat(5000), '<script>', 'dev-rod', 'dev-judge'];
 const KEYS = ['role', 'team', 'name', 'count', 'device', 'on', 'value', 'target', 'delta', 'success', 'kind', 'pin', 'token', 'c', '__proto__', 'constructor'];
 
@@ -24,6 +24,7 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
   const steps = new Set();
   const games = Number(process.env.FUZZ_SPEL) || 60;
   let sent = 0;
+  let undone = 0;
   for (let game = 0; game < games; game++) {
     // Vartannat spel får löpa hela vägen: värden trycker oftare på nästa, och ingen nollställer eller avslutar.
     const deep = game % 2 === 0;
@@ -50,6 +51,8 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
         ...(deep ? [{ t: 'next' }, { t: 'next' }, { t: 'next' }] : []),
         { t: 'start' }, { t: 'next' }, { t: 'lockBid' }, { t: 'call', target: 'pass' }, { t: 'swapTask' },
         { t: 'count', team: s?.schedule?.[s.round]?.[0], delta: 1 }, { t: 'stop', team: s?.schedule?.[s.round]?.[1] },
+        // Ångrandet är sällsynt i de djupa spelen, så att de ändå hinner fram till finalen.
+        ...(deep && rnd() < 0.8 ? [] : [{ t: 'undo' }, { t: 'undo', step: s?.step }]),
         { t: 'finalResult', success: rnd() < 0.5 }, { t: 'bid', value: Math.floor(rnd() * 40) }, { t: 'setMaterial', on: rnd() < 0.5 },
       ]);
       const msg = wire(rnd() < 0.45 ? valid : rnd() < 0.05 ? pick(ODD) : odd);
@@ -58,7 +61,9 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
       now += Math.floor(rnd() * 3000);
       sent += 1;
       const where = `spel ${game}, drag ${i}, steg ${s?.step ?? room.phase}: ${JSON.stringify(msg)?.slice(0, 120)}`;
-      assert.doesNotThrow(() => apply(room, token, msg, isAdmin, now, rnd), where);
+      let error;
+      assert.doesNotThrow(() => { error = apply(room, token, msg, isAdmin, now, rnd); }, where);
+      if (msg?.t === 'undo' && error === null) undone += 1;
       assert.doesNotThrow(() => tick(room, now), `klockan efter ${where}`);
       assert.doesNotThrow(() => {
         JSON.stringify(viewFor(room, null, 'stage'));
@@ -69,6 +74,7 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
     }
   }
   assert.equal(sent, games * 500);
+  assert.ok(undone > 50, `bara ${undone} steg ångrades`);
   // Provet är bara värt något om spelet faktiskt har rört sig genom alla steg.
   for (const step of ['lobby', 'intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end']) {
     assert.ok(steps.has(step), `steget ${step} nåddes aldrig`);

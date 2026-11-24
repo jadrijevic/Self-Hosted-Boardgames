@@ -57,6 +57,13 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 - Hoppar ett lag av räknas resten av schemat om så att kvarvarande lag slutar på lika många dueller. Går det inte räknas poängen som snitt per duell.
 - Uppdragen delas ut i tre sorter (kropp, röst, huvud) så att varje lag får så olika sorter som möjligt.
 
+## När något blir fel
+
+- Värden kan ångra det senaste steget. Läget före steget läggs tillbaka: bud, syn, resultat, poäng och rekord. Det går att ångra upp till sex steg i rad.
+- Under ett försök betyder det att försöket börjar om. Det får också kontrollanten göra, om tiden startades av misstag.
+- Direkt efter ett försök betyder det att försöket görs om. När lagen turas om gäller det bara laget som just tävlade.
+- Ett bytt uppdrag går att ångra. Ett avslutat spel går inte att ångra.
+
 ## Uppdrag
 
 - Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.

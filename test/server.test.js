@@ -212,6 +212,52 @@ test('spelet startas av värden, och ett bud syns bara för det egna laget tills
   }
 });
 
+test('värden ångrar ett steg över nätet: alla skärmar får läget före, och historiken följer med över en omstart', async () => {
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
+  let app = await startServer({ port: 0, dataDir, adminPin: '4321' });
+  try {
+    const stage = client(app.port, { kind: 'stage' });
+    const phone = client(app.port, { kind: 'player' });
+    await phone.next((m) => m.t === 'welcome');
+    phone.send({ t: 'choose', role: 'team', team: 'rod' });
+    const admin = client(app.port, { kind: 'admin', pin: '4321' });
+    await admin.next((m) => m.t === 'state');
+    admin.send({ t: 'start' });
+    const intro = await admin.next((m) => m.t === 'state' && m.state.syna?.step === 'intro');
+    assert.equal(intro.state.syna.back, undefined);
+    const onStage = stage.next((m) => m.t === 'state' && m.state.syna?.step === 'bid');
+    admin.send({ t: 'next' });
+    const bid = await admin.next((m) => m.t === 'state' && m.state.syna?.step === 'bid');
+    assert.deepEqual(bid.state.syna.back, { step: 'intro', round: 0 });
+    const seen = await onStage;
+    assert.equal(seen.state.syna.back, undefined, 'storbilden får inte veta något om historiken');
+
+    phone.send({ t: 'undo', step: 'bid' });
+    assert.equal((await phone.next((m) => m.t === 'error')).error, 'bara värden får ångra');
+    admin.send({ t: 'undo', step: 'intro' });
+    assert.equal((await admin.next((m) => m.t === 'error')).error, 'läget ändrades, försök igen');
+
+    // Servern startas om mitt i spelet, som vid en uppdatering. Det sparade läget före steget finns kvar.
+    for (const c of [stage, phone, admin]) c.ws.close();
+    await app.close();
+    assert.ok(JSON.parse(readFileSync(path.join(dataDir, 'room.json'), 'utf8')).syna.history.length === 1);
+    app = await startServer({ port: 0, dataDir, adminPin: '4321' });
+    const stage2 = client(app.port, { kind: 'stage' });
+    const admin2 = client(app.port, { kind: 'admin', pin: '4321' });
+    const back = await admin2.next((m) => m.t === 'state' && m.state.syna?.step === 'bid');
+    assert.deepEqual(back.state.syna.back, { step: 'intro', round: 0 });
+    const onStage2 = stage2.next((m) => m.t === 'state' && m.state.syna?.step === 'intro');
+    admin2.send({ t: 'undo', step: 'bid' });
+    const undone = await admin2.next((m) => m.t === 'state' && m.state.syna?.step === 'intro');
+    assert.equal((await onStage2).state.syna.step, 'intro');
+    assert.equal(undone.state.syna.task.id, intro.state.syna.task.id);
+    assert.equal(undone.state.syna.back, undefined);
+    for (const c of [stage2, admin2]) c.ws.close();
+  } finally {
+    await app.close();
+  }
+});
+
 test('läget i korthet visar fas, anslutna och tid sedan senaste ändring, utan hemligheter', async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'boardgames-'));
   const app = await startServer({ port: 0, dataDir, adminPin: '4321' });
