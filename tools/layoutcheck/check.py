@@ -234,6 +234,24 @@ def main():
             host.wait_for_selector("button[data-do=swapTask]")
             if host.query_selector(undo):
                 failures.append("värdsidan: ångra finns kvar efter att steget är ångrat")
+
+            # Nödutgången till finalen kräver också två tryck, och ett tryck på något annat avbryter.
+            early = "button[data-do=toFinal]"
+            if SHOTS:
+                host.screenshot(path=str(SHOTS / "vard-ont-om-tid.png"), full_page=True)
+            host.click(early)
+            if host.inner_text(early) != "Säker? Tryck igen":
+                failures.append("värdsidan: första trycket på Gå till finalen nu ber inte om ett till")
+            host.click("button[data-do=swapTask]")
+            host.wait_for_function(f"document.querySelector('{early}')?.textContent === 'Gå till finalen nu'")
+            host.click(early)
+            host.click(early)
+            host.wait_for_selector("button[data-do=finalResult]")
+            if host.query_selector(early):
+                failures.append("värdsidan: nödutgången finns kvar under finalen")
+            failures += [f"värdsidan under finalen efter nödutgången: {b}" for b in host.evaluate(PAGE)["bad"]]
+            if SHOTS:
+                host.screenshot(path=str(SHOTS / "vard-finalen-i-fortid.png"), full_page=True)
             host.context.close()
             browser.close()
             failures += [f"fel i sidan: {e}" for e in errors]

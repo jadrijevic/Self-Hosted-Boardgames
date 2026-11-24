@@ -381,6 +381,18 @@ function handle(room, ctx, msg, now, rng) {
       beginRound(room, rng);
       return null;
     }
+    case 'toFinal': {
+      // Nödutgången när tiden inte räcker: resten av ronderna stryks och finalen börjar.
+      // En rond som pågår räknas inte. En rond som redan har fått sina poäng behåller dem.
+      if (!ctx.isAdmin) return 'bara värden får gå till finalen';
+      if (['final', 'end'].includes(s.step)) return 'finalen har redan börjat';
+      // Lämnas övningen den här vägen ska rondens läge gälla lagen i schemat, inte lagen som övade.
+      if (s.practice) { s.practice = null; beginRound(room, rng); }
+      s.startedAt = null;
+      s.endsAt = null;
+      s.step = 'final';
+      return null;
+    }
     case 'swapTask': {
       if (!ctx.isAdmin) return 'bara värden får byta uppdrag';
       if (s.practice) return 'övningsronden har ett fast uppdrag. Hoppa över den i stället';
@@ -432,6 +444,22 @@ function standings(room) {
 
 // Det en viss enhet får se av spelet. Här hålls buden hemliga tills båda är låsta,
 // synen tills alla har valt, och ställningen under sista varvet.
+// Underlag för värdens nödutgång: hur många ronder som är räknade, om alla lag då har tävlat lika många
+// gånger, och efter vilken rond det blir jämnt nästa gång. Räknas ur det verkliga schemat.
+export function fairness(s) {
+  const played = s.practice ? 0 : s.round + (s.step === 'score' ? 1 : 0);
+  const count = Object.fromEntries(Object.keys(s.scores).map((id) => [id, 0]));
+  const level = () => new Set(Object.values(count)).size === 1;
+  let even = true;
+  let next = null;
+  s.schedule.forEach((pair, i) => {
+    for (const t of pair) count[t] += 1;
+    if (i + 1 === played) even = level();
+    if (i + 1 > played && next === null && level()) next = i + 1;
+  });
+  return { played, even, next };
+}
+
 export function view(room, ctx) {
   const s = room.syna;
   if (!s) return null;
@@ -442,7 +470,8 @@ export function view(room, ctx) {
   const isJudge = ctx.isAdmin || ctx.device?.role === 'judge';
   const bidsShown = !['intro', 'bid'].includes(s.step);
   const callsShown = !['intro', 'bid', 'call'].includes(s.step);
-  const hidden = s.round >= s.hideFrom && s.step !== 'end';
+  // Ställningen är dold under sista varvet och under finalen, också när värden gått dit i förtid.
+  const hidden = (s.round >= s.hideFrom || s.step === 'final') && s.step !== 'end';
 
   const bids = {};
   for (const t of duel) {
@@ -483,6 +512,11 @@ export function view(room, ctx) {
   // Vad ett ångrande leder tillbaka till. Bara steget lämnas ut, aldrig det sparade läget.
   const last = Array.isArray(s.history) ? s.history.at(-1) : null;
   if (isJudge && last?.syna) out.back = { step: last.syna.step, round: last.syna.round };
+  // Nödutgången visas så länge det finns ronder kvar att stryka.
+  if (ctx.isAdmin && !['final', 'end'].includes(s.step)) {
+    const fair = fairness(s);
+    if (fair.played < s.schedule.length) out.fair = fair;
+  }
   if (s.step === 'end') out.standings = standings(room);
   return out;
 }

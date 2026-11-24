@@ -1,7 +1,8 @@
 // Fynden från masstesterna (tools/storm), som tester: felen ska inte komma tillbaka.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDevice, apply } from '../server/room.js';
+import { addDevice, apply, viewFor } from '../server/room.js';
+import { stage, player, admin } from '../public/syna.js';
 import { beginRound } from '../games/syna/game.js';
 import { runMany } from '../tools/storm/scenarios.js';
 import { setup } from './helpers.js';
@@ -29,7 +30,7 @@ test('masstestet: 150 kvällar där allt krånglar, och inget är fel efteråt',
   assert.deepEqual(report.violations, {}, JSON.stringify(report.violations, null, 1).slice(0, 1500));
   assert.equal(report.finished, 150, 'varje kväll kom i mål');
   // Provet är bara värt något om det som ska krångla faktiskt har krånglat.
-  assert.ok(report.peeks > 50 && report.restarts > 50 && report.undone > 50 && report.finishers > 200 && report.practice > 500, JSON.stringify(report));
+  assert.ok(report.peeks > 50 && report.restarts > 50 && report.undone > 50 && report.finishers > 200 && report.practice > 500 && report.early > 10, JSON.stringify(report));
   for (const step of ['intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end']) assert.ok(report.steps[step] > 0, step);
 });
 
@@ -137,4 +138,26 @@ test('vid lika bud avgör slumpen vem som börjar, inte platsen i schemat', () =
     first[s.order[0] === a ? 'först i schemat' : 'sist i schemat'] = (first[s.order[0] === a ? 'först i schemat' : 'sist i schemat'] ?? 0) + 1;
   }
   assert.ok(first['först i schemat'] > 70 && first['sist i schemat'] > 70, JSON.stringify(first));
+});
+
+test('värden går till finalen direkt från övningsronden, och alla sidor går att rita', () => {
+  // Masstestet hittade det: övningens lag är inte lagen i rond 1, och sidorna letade bud hos fel lag.
+  for (const teams of [2, 3, 4, 5, 6]) {
+    const g = setup(teams, 5);
+    g.room.settings.practice = true;
+    g.admin({ t: 'start' });
+    const s = g.room.syna;
+    g.admin({ t: 'next' });
+    assert.equal(g.admin({ t: 'toFinal' }), null);
+    assert.deepEqual([s.step, s.practice, s.round], ['final', null, 0]);
+    assert.match(stage(viewFor(g.room, null, 'stage'), g.clock.now), /Finalen/);
+    assert.match(admin(viewFor(g.room, null, 'admin'), g.clock.now, ''), /Finalen lyckades/);
+    for (const who of [...g.room.teams.map((t) => t.id), 'judge', 'aud']) {
+      assert.match(player(viewFor(g.room, `tok-${who}`, 'player'), g.clock.now), /Finalen/, who);
+    }
+    g.admin({ t: 'finalResult', success: true });
+    assert.equal(s.step, 'end');
+    assert.ok(Object.values(s.scores).every((p) => p === 0), 'övningen gav inga poäng');
+    assert.deepEqual(g.room.records, {}, 'och inga rekord');
+  }
 });

@@ -21,6 +21,7 @@ Det här fungerar:
 - Värden går vidare mellan stegen, kan byta uppdrag och kan lägga bud eller syna åt ett lag som saknar mobil.
 - Kvällen börjar med en övningsrond utan poäng och rekord, som lär ut bud och syn. Värden kan hoppa över den eller slå av den i lobbyn.
 - Värden kan ångra de senaste stegen och göra om ett försök. Kontrollanten kan börja om ett försök som startades av misstag.
+- Räcker inte tiden går värden till finalen i förtid. Spelade ronder räknas, och värdsidan säger om lagen har tävlat lika många gånger.
 - Medan ett lags bud eller syn är hemligt kan dess mobiler inte byta lag. Under spelet kan ingen ny bli kontrollant så länge det finns en.
 - Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
 - Rekordboken: bästa resultat per uppdrag sparas mellan kvällarna.
@@ -142,9 +143,9 @@ Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker s
 
 Tre skript i `tools/storm/` provar spelet hårdare än testerna, från var sitt håll. `npm run storm` kör alla tre.
 
-- `scenarios.js` spelar tusentals kvällar genom spellogiken där allt krånglar: lag som inte svarar, mobiler som lämnar och byter lag, någon som tjuvkikar på motståndarens bud, en obehörig kontrollant, en värd som trycker fel och ångrar, omstarter mitt i ett steg och klockor som hoppar. Efter varje meddelande kontrolleras att hemligheter är hemliga, att ställningen är summan av rondernas poäng, att det sparade läget går att läsa tillbaka och att värden ensam kan ta kvällen i mål.
+- `scenarios.js` spelar tusentals kvällar genom spellogiken där allt krånglar: lag som inte svarar, mobiler som lämnar och byter lag, någon som tjuvkikar på motståndarens bud, en obehörig kontrollant, en värd som trycker fel och ångrar eller går till finalen i förtid, omstarter mitt i ett steg och klockor som hoppar. Efter varje meddelande kontrolleras att hemligheter är hemliga, att ställningen är summan av rondernas poäng, att det sparade läget går att läsa tillbaka och att värden ensam kan ta kvällen i mål.
 - `load.js` stormar en riktig server: tusentals hämtningar, 500 anslutningar på en gång, en flod av meddelanden, trasiga och för stora meddelanden, gissning av pinkoden, en hel kväll medan andra bråkar, och servern dödad femton gånger mitt i spelet.
-- `balance.js` spelar kvällar med lag som budar och synar på olika sätt och visar om något sätt att spela vinner för lätt, hur ofta kvällen är avgjord i förväg, om schemat är rättvist och hur lång kvällen blir. Lagens prestationer där är antaganden, inte mätningar.
+- `balance.js` spelar kvällar med lag som budar och synar på olika sätt och visar om något sätt att spela vinner för lätt, hur ofta kvällen är avgjord i förväg, om schemat är rättvist, hur lång kvällen blir och vad som ändras om värden går till finalen i förtid. Lagens prestationer där är antaganden, inte mätningar.
 
 De två första körs av CI på varje pull request och avslutar med fel om något inte håller. Fynden de har gett finns som tester i `test/storm.test.js`.
 
