@@ -122,3 +122,19 @@ test('under spelet kan ingen ny bli kontrollant så länge det finns en', () => 
   assert.equal(g.as('aud', { t: 'choose', role: 'judge' }), null);
   assert.equal(g.as('aud', { t: 'next' }), null);
 });
+
+test('vid lika bud avgör slumpen vem som börjar, inte platsen i schemat', () => {
+  const first = {};
+  for (let seed = 1; seed <= 200; seed++) {
+    const g = setup(4, seed);
+    g.admin({ t: 'start' });
+    const s = g.room.syna;
+    const [a, b] = s.schedule[0];
+    g.admin({ t: 'next' });
+    g.as(a, { t: 'lockBid' });
+    g.as(b, { t: 'lockBid' });
+    assert.equal(s.bids[a].value, s.bids[b].value);
+    first[s.order[0] === a ? 'först i schemat' : 'sist i schemat'] = (first[s.order[0] === a ? 'först i schemat' : 'sist i schemat'] ?? 0) + 1;
+  }
+  assert.ok(first['först i schemat'] > 70 && first['sist i schemat'] > 70, JSON.stringify(first));
+});

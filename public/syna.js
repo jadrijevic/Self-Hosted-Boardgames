@@ -235,7 +235,7 @@ function callPanel(s, t, forAdmin = false) {
     <p class="lbl">${forAdmin ? `${lag(s, t)}: ` : ''}Vem missar sitt bud?</p>
     ${g.duel.map((d) => btn(d, `${lag(s, d)} missar <small>bud ${fmt(g.bids[d].value)} ${esc(g.task.unit)}</small>`)).join('')}
     ${btn('pass', 'Stå över')}
-    <p class="unit">Rätt syn ger 2 poäng. Fel syn kostar 1.</p>
+    <p class="unit">Rätt syn ger er 2 poäng. Fel syn ger dem 1.</p>
   </section>`;
 }
 

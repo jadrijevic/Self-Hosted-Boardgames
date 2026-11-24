@@ -35,7 +35,7 @@ export function pickTask(kind, allowMaterial, used, rng = Math.random) {
 
 // Poängen för en rond.
 //   Klarat bud: 1. Djärvaste klarade budet: 2 till (delas vid lika bud).
-//   Rätt syn: 2. Fel syn: -1, som går till det synade laget.
+//   Rätt syn: 2. Fel syn: det synade laget får 1. Den som synade förlorar inget: ingen ställning sjunker någonsin.
 export function scoreRound({ direction, bids, results, calls = {}, factor = 1 }) {
   const teams = Object.keys(bids);
   const made = {};
@@ -55,7 +55,6 @@ export function scoreRound({ direction, bids, results, calls = {}, factor = 1 })
   for (const [caller, target] of Object.entries(calls)) {
     if (!(target in made)) continue; // stod över
     if (made[target]) {
-      points[caller] -= 1;
       points[target] += 1;
     } else {
       points[caller] += 2;
@@ -121,14 +120,16 @@ export function start(room, now = Date.now(), rng = Math.random) {
   return null;
 }
 
-function closeBids(room) {
+function closeBids(room, rng = Math.random) {
   const s = room.syna;
   const task = taskOf(s);
   const [a, b] = duelOf(s);
   s.bids[a].locked = true;
   s.bids[b].locked = true;
-  // Det djärvaste budet går sist när lagen turas om.
-  s.order = boldness(task, s.bids[a].value) <= boldness(task, s.bids[b].value) ? [a, b] : [b, a];
+  // Det djärvaste budet går sist när lagen turas om. Vid lika bud avgör slumpen, så att inte samma lag
+  // alltid börjar: laget som står först i schemat gör det i varje duell.
+  const [x, y] = [boldness(task, s.bids[a].value), boldness(task, s.bids[b].value)];
+  s.order = (x === y ? rng() < 0.5 : x < y) ? [a, b] : [b, a];
   s.step = watchersOf(room).length ? 'call' : 'ready';
 }
 
@@ -200,7 +201,7 @@ function advance(room, ctx, isJudge, now, rng) {
   if (!ctx.isAdmin && !(isJudge && judgeSteps.includes(s.step))) return 'bara värden får gå vidare här';
   switch (s.step) {
     case 'intro': s.step = 'bid'; return null;
-    case 'bid': closeBids(room); return null;
+    case 'bid': closeBids(room, rng); return null;
     case 'call':
       for (const w of watchersOf(room)) s.calls[w] ??= 'pass';
       s.step = 'ready';
@@ -309,7 +310,7 @@ function handle(room, ctx, msg, now, rng) {
         return null;
       }
       bid.locked = true;
-      if (duel.every((t) => s.bids[t].locked)) closeBids(room);
+      if (duel.every((t) => s.bids[t].locked)) closeBids(room, rng);
       return null;
     }
     case 'call': {
