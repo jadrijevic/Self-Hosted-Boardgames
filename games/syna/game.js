@@ -444,6 +444,25 @@ function standings(room) {
 
 // Det en viss enhet får se av spelet. Här hålls buden hemliga tills båda är låsta,
 // synen tills alla har valt, och ställningen under sista varvet.
+// Händelseloggen (server/log.js). Nyckeln ändras när spelet byter steg, uppdrag, lag på tur eller försök i finalen.
+export const logKey = (room) => (room.syna ? `${stepKey(room.syna)}|${room.syna.final?.tries ?? 0}` : '');
+// En rad till loggen, byggd ur storbildens vy g: det som har visats för alla, och inget annat.
+export function logEntry(g) {
+  const out = {
+    round: g.round, rounds: g.rounds, practice: g.practice, step: g.step, turn: g.turn,
+    task: g.task.id, taskName: g.task.name, direction: g.task.direction, measure: g.task.measure, unit: g.task.unit,
+    startBid: g.task.bid.start, seconds: g.task.seconds, topic: g.topic,
+    duel: g.duel, order: g.order, double: g.double,
+    bids: Object.fromEntries(g.duel.map((t) => [t, g.bids[t]?.value ?? null])),
+    calls: g.calls, results: g.results, made: g.made, points: g.points, newRecord: g.newRecord,
+    scores: g.scores,
+    final: { tries: g.final.tries, success: g.final.success },
+  };
+  if (g.standings) out.standings = g.standings;
+  return out;
+}
+export { logSummary } from './log.js';
+
 // Underlag för värdens nödutgång: hur många ronder som är räknade, om alla lag då har tävlat lika många
 // gånger, och efter vilken rond det blir jämnt nästa gång. Räknas ur det verkliga schemat.
 export function fairness(s) {

@@ -179,6 +179,7 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 /* ---- startsidan ---- */
 .start main>.muted{margin:-10px 0 0}
 .start a.btn{text-align:center;text-decoration:none}
+.start .txt a{color:inherit;font-weight:600}
 .start .qrrow{display:flex;align-items:center;gap:14px;margin:6px 0 12px}
 .start .qrrow img{width:160px;height:160px;flex:none;border:2px solid var(--line);border-radius:12px;padding:6px;background:#fff}
 .start .qrrow p{margin:0}
