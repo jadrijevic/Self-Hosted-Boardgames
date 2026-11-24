@@ -70,7 +70,8 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 ## Uppdrag
 
 - Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.
-- Den minsta ser, väljer eller bestämmer, men är aldrig ensam utförare under tidspress.
+- Väskan och Ryggen tar över fem minuter per rond och är avslagna tills värden slår på långa uppdrag i lobbyn.
+- Den minsta ser, väljer eller bestämmer, men är aldrig ensam utförare under tidspress. Den står inte först i ett led, säger inte första svaret och är aldrig den enda som får göra något. I Kedjan och Rimmet är den joker och får svara när som helst.
 - Cirka 20 uppdrag ska finnas, 6 spelas. Värden kan byta uppdrag med en knapp före budgivningen.
 - Uppdragen står i `tasks.js`. Utan material finns fem av varje sort:
   - röst: Djuren, Nynna, Viskningen, Tungvrickaren, Sången

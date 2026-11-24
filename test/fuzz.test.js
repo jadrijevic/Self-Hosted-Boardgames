@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { newRoom, addDevice, apply, viewFor, tick } from '../server/room.js';
 import { seeded } from './helpers.js';
 
-const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
+const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'setLong', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
 const ODD = [undefined, null, 0, -1, 1, 2, 7, 1e9, -1e9, NaN, Infinity, 0.5, '', 'x', 'rod', 'bla', 'gron', 'gul', 'lila', 'rosa', 'pass', 'team', 'audience', 'judge', '__proto__', 'constructor', 'hasOwnProperty', 'toString', [], [1], {}, { a: 1 }, true, false, 'a'.repeat(5000), '<script>', 'dev-rod', 'dev-judge'];
 const KEYS = ['role', 'team', 'name', 'count', 'device', 'on', 'value', 'target', 'delta', 'success', 'kind', 'pin', 'token', 'c', '__proto__', 'constructor'];
 
@@ -53,7 +53,7 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
         { t: 'count', team: s?.schedule?.[s.round]?.[0], delta: 1 }, { t: 'stop', team: s?.schedule?.[s.round]?.[1] },
         // Ångrandet är sällsynt i de djupa spelen, så att de ändå hinner fram till finalen.
         ...(deep && rnd() < 0.8 ? [] : [{ t: 'undo' }, { t: 'undo', step: s?.step }]),
-        { t: 'finalResult', success: rnd() < 0.5 }, { t: 'bid', value: Math.floor(rnd() * 40) }, { t: 'setMaterial', on: rnd() < 0.5 },
+        { t: 'finalResult', success: rnd() < 0.5 }, { t: 'bid', value: Math.floor(rnd() * 40) }, { t: 'setMaterial', on: rnd() < 0.5 }, { t: 'setLong', on: rnd() < 0.5 },
       ]);
       const msg = wire(rnd() < 0.45 ? valid : rnd() < 0.05 ? pick(ODD) : odd);
       const isAdmin = rnd() < (deep ? 0.7 : 0.4);
