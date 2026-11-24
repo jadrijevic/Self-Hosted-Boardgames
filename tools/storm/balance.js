@@ -47,6 +47,30 @@ const roundSeconds = (task, watchers) => (task.text.length + task.role.length) /
   + (task.mode === 'turns' ? 2 : 1) * (15 + task.seconds * (task.measure === 'time' ? 0.7 : 1)) + 10 + 20;
 const FINAL_SECONDS = 150;
 
+// Regelvarianter som räknas vid sidan av de riktiga poängen, på samma bud, syner och resultat.
+//   nu        reglerna som de är: fel syn kostar 1
+//   golv      som nu, men ett lags ställning kan aldrig gå under noll
+//   utan      fel syn kostar ingenting för den som synade. Det synade laget får fortfarande 1
+const VARIANTS = { nu: { wrong: -1, floor: false }, golv: { wrong: -1, floor: true }, utan: { wrong: 0, floor: false } };
+function variantPoints(rule, { direction, bids, made, calls, factor }) {
+  const duel = Object.keys(bids);
+  const points = Object.fromEntries([...duel, ...Object.keys(calls)].map((t) => [t, 0]));
+  const ok = duel.filter((t) => made[t]);
+  for (const t of ok) points[t] += 1;
+  if (ok.length) {
+    const bold = (t) => (direction === 'low' ? -bids[t] : bids[t]);
+    const top = Math.max(...ok.map(bold));
+    const boldest = ok.filter((t) => bold(t) === top);
+    for (const t of boldest) points[t] += 2 / boldest.length;
+  }
+  for (const [caller, target] of Object.entries(calls)) {
+    if (!(target in made)) continue;
+    if (made[target]) { points[caller] += rule.wrong; points[target] += 1; } else points[caller] += 2;
+  }
+  for (const t of Object.keys(points)) points[t] *= factor;
+  return points;
+}
+
 function evening(teams, profile, rnd) {
   const room = newRoom(teams);
   const admin = (msg) => apply(room, null, msg, true, 0, rnd);
@@ -58,6 +82,8 @@ function evening(teams, profile, rnd) {
   let seconds = FINAL_SECONDS;
   let callPoints = 0;
   let decidedEarly = false;
+  const totals = Object.fromEntries(Object.keys(VARIANTS).map((v) => [v, Object.fromEntries(ids.map((id) => [id, 0]))]));
+  const leader = {}; // per variant: laget som leder ensamt när sista ronden börjar, annars null
   for (let guard = 0; guard < 400 && s.step !== 'end'; guard++) {
     const task = taskById(s.tasks[s.round]);
     const duel = s.schedule[s.round];
@@ -69,6 +95,11 @@ function evening(teams, profile, rnd) {
         const sorted = Object.values(s.scores).sort((x, y) => y - x);
         const factor = s.doubleFrom !== null && s.round >= s.doubleFrom ? 2 : 1;
         decidedEarly = sorted[0] - sorted[1] > (3 + (ids.length - 2)) * factor;
+        for (const v of Object.keys(VARIANTS)) {
+          const top = Math.max(...Object.values(totals[v]));
+          const first = ids.filter((id) => totals[v][id] === top);
+          leader[v] = first.length === 1 ? first[0] : null;
+        }
       }
       admin({ t: 'next' });
     } else if (s.step === 'bid') {
@@ -90,35 +121,44 @@ function evening(teams, profile, rnd) {
       }
       admin({ t: 'next' });
       for (const [id, p] of Object.entries(s.points)) if (!duel.includes(id)) callPoints += Math.abs(p);
+      const round = { direction: task.direction, bids: Object.fromEntries(duel.map((t) => [t, s.bids[t].value])), made: s.made, calls: s.calls, factor: s.doubleFrom !== null && s.round >= s.doubleFrom ? 2 : 1 };
+      for (const [v, rule] of Object.entries(VARIANTS)) {
+        for (const [id, p] of Object.entries(variantPoints(rule, round))) totals[v][id] = rule.floor ? Math.max(0, totals[v][id] + p) : totals[v][id] + p;
+      }
     } else if (s.step === 'score') admin({ t: 'next' });
     else if (s.step === 'final') admin({ t: 'finalResult', success: true });
   }
   const rows = viewFor(room, null, 'stage').syna.standings;
-  return { rows, scores: s.scores, seconds, callPoints, decidedEarly, ids, skill };
+  if (ids.some((id) => totals.nu[id] !== s.scores[id])) throw new Error('varianten "nu" ska ge samma poäng som spelet');
+  return { rows, scores: s.scores, seconds, callPoints, decidedEarly, ids, skill, totals, leader };
 }
 
-function study(teams, profile, label) {
+function study(teams, profile, label, variant = 'nu') {
   const rnd = rng32(teams * 7919 + label.length * 31);
-  const out = { wins: profile.map(() => 0), score: profile.map(() => 0), ties: 0, negative: 0, early: 0, bestWins: 0, minutes: [], callShare: 0, margin: 0 };
+  const out = { wins: profile.map(() => 0), score: profile.map(() => 0), ties: 0, negative: 0, zero: 0, early: 0, bestWins: 0, minutes: [], callShare: 0, margin: 0, led: 0, leaderWins: 0 };
   for (let i = 0; i < N; i++) {
     // Lagen byter plats i schemat varje kväll, så att sättet att spela inte blandas ihop med platsen.
     const order = profile.map((p, k) => k).sort(() => rnd() - 0.5);
     const e = evening(teams, order.map((k) => profile[k]), rnd);
-    const winners = e.rows.filter((r) => r.place === 1).map((r) => r.team);
+    const total = e.totals[variant];
+    const best1 = Math.max(...Object.values(total));
+    const winners = e.ids.filter((id) => total[id] === best1);
     if (winners.length > 1) out.ties += 1;
     e.ids.forEach((id, pos) => {
       const who = order[pos];
-      out.score[who] += e.scores[id];
+      out.score[who] += total[id];
       if (winners.includes(id)) out.wins[who] += 1 / winners.length;
     });
-    if (Object.values(e.scores).some((p) => p < 0)) out.negative += 1;
+    if (Object.values(total).some((p) => p < 0)) out.negative += 1;
+    if (Object.values(total).some((p) => p <= 0)) out.zero += 1;
+    if (e.leader[variant]) { out.led += 1; if (winners.includes(e.leader[variant])) out.leaderWins += 1 / winners.length; }
     if (e.decidedEarly) out.early += 1;
     const best = e.ids.reduce((x, y) => (e.skill[x] >= e.skill[y] ? x : y));
     if (winners.includes(best)) out.bestWins += 1 / winners.length;
     out.minutes.push(e.seconds / 60);
-    const total = Object.values(e.scores).reduce((x, y) => x + Math.abs(y), 0);
-    out.callShare += total ? e.callPoints / total : 0;
-    out.margin += e.rows[0].score - e.rows.at(-1).score;
+    const sum = Object.values(e.scores).reduce((x, y) => x + Math.abs(y), 0);
+    out.callShare += sum ? e.callPoints / sum : 0;
+    out.margin += best1 - Math.min(...Object.values(total));
   }
   return out;
 }
@@ -145,7 +185,7 @@ for (const [label, odd] of [['budar alltid lägsta möjliga', { bid: 'min', call
 }
 
 console.log('\n3. Ett lag är bättre eller sämre än de andra tre (fyra lag, alla budar lagom). Andel vinster, 25 % är jämnt');
-for (const skill of [0.6, 0.8, 1.25, 1.5]) {
+for (const skill of [0.6, 0.8, 1.25, 1.3, 1.5]) {
   const r = study(4, [{ bid: 'lagom', call: 'kalkyl', skill }, ...same(3)], `skill${skill}`);
   console.log(`   laget presterar ${String(Math.round(skill * 100)).padStart(3)} % av de andras nivå: vinner ${pct(r.wins[0] / N).padEnd(6)} snittpoäng ${(r.score[0] / N).toFixed(1)} mot ${((r.score[1] + r.score[2] + r.score[3]) / 3 / N).toFixed(1)}`);
 }
@@ -159,7 +199,23 @@ for (const teams of [3, 4, 5, 6]) {
   console.log(`   ${teams} lag: ${avg.map((x) => x.toFixed(2)).join('  ')}   (största skillnad ${(Math.max(...avg) - Math.min(...avg)).toFixed(2)})`);
 }
 
-console.log('\n5. Längsta och kortaste rond, med antagandena om tid ovan');
+console.log('\n5. Regelvarianter, räknade på samma kvällar. nu: fel syn kostar 1. golv: ställningen går aldrig under noll. utan: fel syn kostar inget');
+console.log('   lag  variant  något lag på minus  något lag på noll eller under  ledaren före sista ronden vinner  bästa laget vinner  skillnad etta–sist');
+for (const teams of [3, 4, 5, 6]) {
+  for (const v of Object.keys(VARIANTS)) {
+    const r = study(teams, same(teams), 'lika', v);
+    console.log(`   ${teams}    ${v.padEnd(8)} ${pct(r.negative / N).padEnd(19)} ${pct(r.zero / N).padEnd(30)} ${pct(r.leaderWins / Math.max(1, r.led)).padEnd(33)} ${pct(r.bestWins / N).padEnd(19)} ${(r.margin / N).toFixed(1)}`);
+  }
+}
+console.log('   Lönar det sig att alltid syna, eller aldrig? Ett lag av fyra, andel vinster (25 % är jämnt)');
+for (const v of Object.keys(VARIANTS)) {
+  const always = study(4, [{ bid: 'lagom', call: 'alltid', skill: 1 }, ...same(3)], 'alltid', v);
+  const never = study(4, [{ bid: 'lagom', call: 'aldrig', skill: 1 }, ...same(3)], 'aldrig', v);
+  const all = study(4, same(4, 'lagom', 'alltid'), 'allaalltid', v);
+  console.log(`   ${v.padEnd(6)} synar alltid: ${pct(always.wins[0] / N).padEnd(5)} synar aldrig: ${pct(never.wins[0] / N).padEnd(5)} om alla alltid synar: något lag på minus ${pct(all.negative / N)}, bästa laget vinner ${pct(all.bestWins / N)}`);
+}
+
+console.log('\n6. Längsta och kortaste rond, med antagandena om tid ovan');
 const times = TASKS.filter((t) => !t.material).map((t) => [t.name, roundSeconds(t, true) / 60]).sort((x, y) => y[1] - x[1]);
 console.log(`   längst: ${times.slice(0, 4).map(([n, m]) => `${n} ${m.toFixed(1)} min`).join(', ')}`);
 console.log(`   kortast: ${times.slice(-3).map(([n, m]) => `${n} ${m.toFixed(1)} min`).join(', ')}`);

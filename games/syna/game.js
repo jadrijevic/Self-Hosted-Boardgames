@@ -121,14 +121,16 @@ export function start(room, now = Date.now(), rng = Math.random) {
   return null;
 }
 
-function closeBids(room) {
+function closeBids(room, rng = Math.random) {
   const s = room.syna;
   const task = taskOf(s);
   const [a, b] = duelOf(s);
   s.bids[a].locked = true;
   s.bids[b].locked = true;
-  // Det djärvaste budet går sist när lagen turas om.
-  s.order = boldness(task, s.bids[a].value) <= boldness(task, s.bids[b].value) ? [a, b] : [b, a];
+  // Det djärvaste budet går sist när lagen turas om. Vid lika bud avgör slumpen, så att inte samma lag
+  // alltid börjar: laget som står först i schemat gör det i varje duell.
+  const [x, y] = [boldness(task, s.bids[a].value), boldness(task, s.bids[b].value)];
+  s.order = (x === y ? rng() < 0.5 : x < y) ? [a, b] : [b, a];
   s.step = watchersOf(room).length ? 'call' : 'ready';
 }
 
@@ -200,7 +202,7 @@ function advance(room, ctx, isJudge, now, rng) {
   if (!ctx.isAdmin && !(isJudge && judgeSteps.includes(s.step))) return 'bara värden får gå vidare här';
   switch (s.step) {
     case 'intro': s.step = 'bid'; return null;
-    case 'bid': closeBids(room); return null;
+    case 'bid': closeBids(room, rng); return null;
     case 'call':
       for (const w of watchersOf(room)) s.calls[w] ??= 'pass';
       s.step = 'ready';
@@ -309,7 +311,7 @@ function handle(room, ctx, msg, now, rng) {
         return null;
       }
       bid.locked = true;
-      if (duel.every((t) => s.bids[t].locked)) closeBids(room);
+      if (duel.every((t) => s.bids[t].locked)) closeBids(room, rng);
       return null;
     }
     case 'call': {

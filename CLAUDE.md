@@ -28,3 +28,11 @@ Egna sällskapsspel för Boris familj, körda på hans Unraid-server och spelade
 - Påståenden om att något fungerar ska backas av körda tester eller utdata. Säg tydligt vad som inte är provat.
 - Skript som Boris ska köra på servern får versionsnummer i filnamnet (`-v1`, `-v2`). Kroppen står i `( )`, inget ändras utan bekräftelse, radsluten är LF, och rättigheter sätts via `/mnt/system_apps` och aldrig via `/mnt/user`. Unraid har ingen python3: skripten använder bash, curl och docker.
 - `shellcheck -x deploy/*.sh test/stubs/*` ska gå igenom. Ändras ett skript i `deploy/` utökas testerna i `test/deploy.test.js`.
+
+## Från fynd till åtgärd
+
+- Masstesterna i `tools/storm/` körs med `npm run storm`. `scenarios.js` och `load.js` körs också av CI och ska sluta utan fel.
+- Ett fel som masstesterna hittar rättas tillsammans med ett test i `test/storm.test.js` som hade fångat det.
+- Nya meddelandetyper och nya sätt att krångla läggs till i `tools/storm/scenarios.js`, inte bara i slumpprovet.
+- En regeländring går i en egen pull request, skild från rättningar. Den visar reglernas beteende före och efter med `tools/storm/balance.js`, ändrar `games/syna/REGLER.md` i samma pull request och säger vilken princip i forskningsunderlaget den bygger på.
+- Siffror ur `balance.js` är antaganden om hur lag presterar, inte mätningar. De får inte beskrivas som mer än så.
