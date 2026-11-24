@@ -27,6 +27,10 @@ const TYPES = {
 };
 const KINDS = ['stage', 'player', 'admin'];
 const MAX_DEVICES = 300;
+const CAST_MS = 20; // ändringar som kommer tätare än så går ut som en enda uppdatering
+const SLOW_BYTES = 1_000_000; // en mobil som inte läser får vänta på nästa uppdatering
+const PIN_QUEUE = 5; // fler samtidiga försök på pinkoden än så nekas direkt
+const PIN_MAX_MS = 30_000; // längsta pausen efter många fel försök i rad
 
 function load(file) {
   let raw;
@@ -51,13 +55,15 @@ const PROXY_HEADERS = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-fo
 
 // logic går att byta ut i tester. I drift är det alltid spellogiken i room.js.
 // wifi är gästnätets namn och lösenord ({ ssid, password }), eller null. Med wifi visar storbilden en wifi-kod före spelets kod.
-export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '', wifi = null, logic = { apply, tick } } = {}) {
+// pinDelay är pausen efter ett fel försök på pinkoden, i millisekunder.
+export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '', wifi = null, pinDelay = 300, logic = { apply, tick } } = {}) {
   mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, 'room.json');
   const pin = adminPin ? String(adminPin) : String(randomInt(1000, 10000));
   const room = load(file);
   const conns = new Map(); // ws -> { token, kind, isAdmin }
   let saveTimer = null;
+  let castTimer = null;
   let lastChange = Date.now();
 
   const online = () => new Set([...conns.values()].map((c) => c.token).filter(Boolean));
@@ -74,13 +80,46 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
     }
   }
 
-  // Varje ändring höjer versionen, går ut till alla och sparas strax efteråt.
+  // Hela läget går ut till alla. En mobil som inte läser det den får hoppas över: nästa uppdatering är ändå hela läget.
+  function cast() {
+    castTimer = null;
+    const on = online();
+    for (const [ws, c] of conns) {
+      if (ws.bufferedAmount < SLOW_BYTES) send(ws, { t: 'state', state: viewFor(room, c.token, c.kind, on) });
+    }
+  }
+
+  // Varje ändring höjer versionen, går ut till alla och sparas strax efteråt. Ändringar som kommer tätt slås ihop,
+  // så att en mobil som skickar hundratals meddelanden i sekunden inte får servern att skicka lika många svar till alla.
   function changed() {
     room.v += 1;
     lastChange = Date.now();
-    const on = online();
-    for (const [ws, c] of conns) send(ws, { t: 'state', state: viewFor(room, c.token, c.kind, on) });
+    if (!castTimer) castTimer = setTimeout(cast, CAST_MS);
     if (!saveTimer) saveTimer = setTimeout(save, 150);
+  }
+
+  // Pinkoden prövas ett försök i taget, och ett fel försök håller grinden stängd en stund för nästa.
+  // Pausen fördubblas för varje fel i rad, upp till en halv minut, och nollställs av ett rätt försök.
+  // Då tar det dygn i stället för sekunder att gissa sig fram. Den som redan har loggat in får en nyckel
+  // och släpps in igen utan att köa, så att värden inte stängs ute medan någon annan gissar.
+  const adminKeys = new Set();
+  let pinGate = Promise.resolve();
+  let pinWaiting = 0;
+  let pinMisses = 0;
+  function tryPin(given) {
+    if (pinWaiting >= PIN_QUEUE) return Promise.resolve(false);
+    pinWaiting += 1;
+    const result = pinGate.then(() => String(given ?? '') === pin);
+    pinGate = result
+      .then((ok) => {
+        if (ok) { pinMisses = 0; return null; }
+        pinMisses += 1;
+        if (pinMisses === 10) console.error('Tio felaktiga pinkoder i rad. Någon gissar, eller så har värden glömt koden.');
+        const pause = Math.min(PIN_MAX_MS, pinDelay * 2 ** Math.min(pinMisses - 1, 20));
+        return new Promise((resolve) => { setTimeout(resolve, pause).unref(); });
+      })
+      .finally(() => { pinWaiting -= 1; });
+    return result;
   }
 
   const joinUrl = (req) => publicUrl || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers.host}`;
@@ -132,17 +171,40 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
     ws.on('pong', () => { ws.isAlive = true; });
     ws.on('error', () => {});
     ws.on('close', () => { if (conns.delete(ws)) changed(); });
+    // Medan värdens pinkod prövas väntar förbindelsens övriga meddelanden på sin tur, i den ordning de kom.
+    let waiting = null;
+    const queue = (job) => {
+      const turn = (waiting ?? Promise.resolve()).then(job).catch((e) => console.error('Fel i ett köat meddelande:', e)).finally(() => { if (waiting === turn) waiting = null; });
+      waiting = turn;
+    };
     ws.on('message', (raw) => {
       let m;
       try { m = JSON.parse(raw.toString()); } catch { return; }
       if (!m || typeof m !== 'object') return;
+      if (waiting) queue(() => handle(m));
+      else handle(m);
+    });
+    function handle(m) {
 
       // Klockjämförelse: klienten räknar ut skillnaden mot serverns tid.
       if (m.t === 'ping') return send(ws, { t: 'pong', c: m.c, s: Date.now() });
 
       if (m.t === 'hello') {
+        // En förbindelse säger hej en gång. Annars kan en enda klient skapa hur många mobiler som helst.
+        if (conns.has(ws)) return;
         const kind = KINDS.includes(m.kind) ? m.kind : 'player';
-        if (kind === 'admin' && String(m.pin ?? '') !== pin) return send(ws, { t: 'denied' });
+        if (kind === 'admin') {
+          const known = typeof m.key === 'string' && adminKeys.has(m.key);
+          return queue(() => (known ? Promise.resolve(true) : tryPin(m.pin)).then((ok) => {
+            if (ws.readyState !== 1 || conns.has(ws)) return;
+            if (!ok) return send(ws, { t: 'denied' });
+            const key = known ? m.key : randomBytes(16).toString('hex');
+            adminKeys.add(key);
+            conns.set(ws, { token: null, kind, isAdmin: true });
+            send(ws, { t: 'welcome', token: null, key, now: Date.now() });
+            changed();
+          }));
+        }
         let token = null;
         if (kind === 'player') {
           const known = typeof m.token === 'string' && Object.hasOwn(room.devices, m.token);
@@ -151,7 +213,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
           token = known ? m.token : randomBytes(16).toString('hex');
           addDevice(room, token, randomBytes(3).toString('hex'));
         }
-        conns.set(ws, { token, kind, isAdmin: kind === 'admin' });
+        conns.set(ws, { token, kind, isAdmin: false });
         send(ws, { t: 'welcome', token, now: Date.now() });
         return changed();
       }
@@ -168,7 +230,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
       }
       if (err) return send(ws, { t: 'error', error: err });
       changed();
-    });
+    }
   });
 
   // En mobil som somnar stänger inte alltid förbindelsen själv. Pinga och rensa de som inte svarar.
@@ -201,6 +263,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
       clearInterval(beat);
       clearInterval(clock);
       clearTimeout(saveTimer);
+      clearTimeout(castTimer);
       for (const ws of wss.clients) ws.terminate();
       conns.clear();
       await save();

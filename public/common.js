@@ -22,13 +22,15 @@ export function connect(kind, handlers = {}) {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     ws.onopen = () => {
       tries = 0;
-      ws.send(JSON.stringify({ t: 'hello', kind, token, pin: store.get('pin') }));
+      // Värden skickar nyckeln från förra inloggningen. Den släpper in utan att pinkoden prövas igen.
+      ws.send(JSON.stringify({ t: 'hello', kind, token, pin: store.get('pin'), key: kind === 'admin' ? store.get('adminKey') : undefined }));
       ws.send(JSON.stringify({ t: 'ping', c: Date.now() }));
     };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.t === 'welcome') {
         if (m.token) { token = m.token; store.set('token', token); }
+        if (m.key) store.set('adminKey', m.key);
         handlers.onStatus?.(true);
       } else if (m.t === 'pong') offset = m.s - (m.c + Date.now()) / 2;
       else if (m.t === 'state') handlers.onState?.(m.state);

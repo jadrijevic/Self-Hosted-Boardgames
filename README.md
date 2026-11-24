@@ -20,6 +20,7 @@ Det här fungerar:
 - Kontrollanten räknar godkända eller stoppar tiden från sin mobil.
 - Värden går vidare mellan stegen, kan byta uppdrag och kan lägga bud eller syna åt ett lag som saknar mobil.
 - Värden kan ångra de senaste stegen och göra om ett försök. Kontrollanten kan börja om ett försök som startades av misstag.
+- Medan ett lags bud eller syn är hemligt kan dess mobiler inte byta lag. Under spelet kan ingen ny bli kontrollant så länge det finns en.
 - Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
 - Rekordboken: bästa resultat per uppdrag sparas mellan kvällarna.
 - Husets röst på storbilden läser upp uppdraget med webbläsarens talsyntes. Den slås på med knappen i lobbyn.
@@ -135,6 +136,20 @@ npm test
 Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 30 000 trasiga och giltiga meddelanden genom alla steg, med ångrade steg emellan, och kräver att spellogiken aldrig kastar ett undantag.
 
 Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart. CI kör också installationsskriptet mot riktig Docker och Compose, med ett wifi-lösenord fullt av specialtecken, och kräver att det kommer fram oförändrat till containern. Unraid och Compose Manager provas inte.
+
+### Masstester
+
+Tre skript i `tools/storm/` provar spelet hårdare än testerna, från var sitt håll. `npm run storm` kör alla tre.
+
+- `scenarios.js` spelar tusentals kvällar genom spellogiken där allt krånglar: lag som inte svarar, mobiler som lämnar och byter lag, någon som tjuvkikar på motståndarens bud, en obehörig kontrollant, en värd som trycker fel och ångrar, omstarter mitt i ett steg och klockor som hoppar. Efter varje meddelande kontrolleras att hemligheter är hemliga, att ställningen är summan av rondernas poäng, att det sparade läget går att läsa tillbaka och att värden ensam kan ta kvällen i mål.
+- `load.js` stormar en riktig server: tusentals hämtningar, 500 anslutningar på en gång, en flod av meddelanden, trasiga och för stora meddelanden, gissning av pinkoden, en hel kväll medan andra bråkar, och servern dödad femton gånger mitt i spelet.
+- `balance.js` spelar kvällar med lag som budar och synar på olika sätt och visar om något sätt att spela vinner för lätt, hur ofta kvällen är avgjord i förväg, om schemat är rättvist och hur lång kvällen blir. Lagens prestationer där är antaganden, inte mätningar.
+
+De två första körs av CI på varje pull request och avslutar med fel om något inte håller. Fynden de har gett finns som tester i `test/storm.test.js`.
+
+Servern skyddar sig mot en klient som bråkar: en förbindelse kan bara säga hej en gång, ändringar som kommer tätt går ut som en uppdatering, en mobil som inte läser hoppas över, och pausen efter en felaktig pinkod fördubblas upp till en halv minut. Den som öppnar hundratals egna förbindelser kan fortfarande fylla platserna. Det skyddar spelet inte mot.
+
+### Layout
 
 Layouten provas för sig i en riktig webbläsare, och av CI på varje pull request. Kontrollen ritar varje uppdrag i varje steg, plus de trängsta fallen med sex lag, och mäter att inget hamnar utanför bilden, att ingen text på storbilden är för liten och att typsnittet som följer med appen är laddat. Lobbyn provas med fyra och sex lag, med wifi-kod och utan, och startsidan provas på mobil och dator. Lokalt kräver den Python med Playwright och Chrome eller Chromium:
 

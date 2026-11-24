@@ -29,6 +29,12 @@ jobs:
         run: |
           shellcheck -x deploy/*.sh test/stubs/*
           ! grep -rlI $'\r' deploy test/stubs
+      # Masstesterna: 1 500 kvällar där allt krånglar genom spellogiken, och en laststorm mot en riktig server.
+      # Båda avslutar med fel om något inte håller.
+      - name: Masstest av spellogiken
+        run: node tools/storm/scenarios.js 1500
+      - name: Laststorm mot servern
+        run: node tools/storm/load.js
 
   # Layouten i en riktig webbläsare: varje uppdrag i varje steg på storbild, mobil och värdsida.
   # Typsnittet följer med appen, så måtten är desamma här som på skärmarna hemma.

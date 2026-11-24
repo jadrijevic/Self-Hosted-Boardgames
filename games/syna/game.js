@@ -253,6 +253,24 @@ function undo(room, ctx, msg) {
   return null;
 }
 
+// Får mobilen byta plats just nu? Returnerar en feltext om inte, annars null.
+// Medan ett lags val är hemligt sitter dess mobiler kvar: annars kan man byta till motståndarlaget,
+// se deras bud och byta tillbaka. En mobil utan plats får alltid gå med, så att en ny mobil kan ersätta en som dött.
+// Under spelet kan ingen ny bli kontrollant så länge det finns en. Värden kan ta bort den som sitter.
+export function seatLocked(room, dev, msg) {
+  const s = room.syna;
+  if (!s) return null;
+  const duel = duelOf(s);
+  if (dev.role === 'team') {
+    if (s.step === 'bid' && duel.includes(dev.team)) return 'vänta tills buden är lagda';
+    if (s.step === 'call' && !duel.includes(dev.team)) return 'vänta tills alla har synat';
+  }
+  if (msg.t === 'choose' && msg.role === 'judge' && dev.role !== 'judge' && Object.values(room.devices).some((d) => d.role === 'judge')) {
+    return 'det finns redan en kontrollant. Värden kan ta bort den';
+  }
+  return null;
+}
+
 // Tar emot en avsikt under spelet. ctx = { device, isAdmin }.
 // Värden får agera åt ett lag (msg.team), så att kvällen klarar sig om en mobil saknas.
 export function apply(room, ctx, msg, now = Date.now(), rng = Math.random) {
@@ -317,6 +335,8 @@ function handle(room, ctx, msg, now, rng) {
       const active = performing(s, task);
       if (!active.includes(msg.team)) return 'laget tävlar inte just nu';
       if (s.results[msg.team] != null) return 'tiden är redan stoppad';
+      // Ett tryck efter att tiden gått ut räknas som att tiden gick ut, som om klockan hade hunnit först.
+      if (now >= s.endsAt) { endPlay(room); return null; }
       s.results[msg.team] = Math.round((now - s.startedAt) / 100) / 10;
       if (active.every((t) => s.results[t] != null)) endPlay(room);
       return null;
@@ -327,7 +347,10 @@ function handle(room, ctx, msg, now, rng) {
       if (!duel.includes(msg.team)) return 'okänt lag';
       const v = msg.value === null ? null : Number(msg.value);
       if (v !== null && (!Number.isFinite(v) || v < 0)) return 'ogiltigt resultat';
-      s.results[msg.team] = v;
+      // En tid kan inte vara längre än uppdragets tid, och det som räknas är hela tal.
+      if (v === null) s.results[msg.team] = null;
+      else if (task.measure === 'time') s.results[msg.team] = Math.min(task.seconds, Math.round(v * 10) / 10);
+      else s.results[msg.team] = Math.round(v);
       return null;
     }
     case 'next':

@@ -49,11 +49,12 @@ test('lobbyn synkar mellan tv och mobil, och mobilen känns igen när den kommer
     phone.ws.close();
     await stage.next((m) => rod(m)?.length === 1 && !rod(m)[0].online);
 
+    const onStage = stage.next((m) => rod(m)?.length === 1 && rod(m)[0].online);
     const back = client(app.port, { kind: 'player', token: welcome.token });
     const mine = await back.next((m) => m.t === 'state' && m.state.me?.role === 'team');
     assert.equal(mine.state.me.id, deviceId);
     assert.equal(mine.state.me.team, 'rod');
-    await stage.next((m) => rod(m)?.length === 1 && rod(m)[0].online);
+    await onStage;
 
     const wrong = client(app.port, { kind: 'admin', pin: '0000' });
     await wrong.next((m) => m.t === 'denied');
@@ -255,6 +256,93 @@ test('värden ångrar ett steg över nätet: alla skärmar får läget före, oc
     for (const c of [stage2, admin2]) c.ws.close();
   } finally {
     await app.close();
+  }
+});
+
+test('servern tål en klient som bråkar: ett hej per förbindelse, och en flod av meddelanden slås ihop', async () => {
+  const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), adminPin: '4321' });
+  try {
+    const admin = client(app.port, { kind: 'admin', pin: '4321' });
+    await admin.next((m) => m.t === 'state');
+    const stage = client(app.port, { kind: 'stage' });
+    await stage.next((m) => m.t === 'state');
+
+    // Femtio hej på samma förbindelse blir en mobil, inte femtio.
+    const ghost = client(app.port, { kind: 'player' });
+    const welcome = await ghost.next((m) => m.t === 'welcome');
+    for (let i = 0; i < 50; i++) ghost.send({ t: 'hello', kind: 'player' });
+    ghost.send({ t: 'ping', c: 1 });
+    await ghost.next((m) => m.t === 'pong');
+    assert.equal(ghost.seen.filter((m) => m.t === 'welcome').length, 1);
+    assert.equal(welcome.token.length, 32);
+
+    // Trehundra giltiga meddelanden i ett svep ger en handfull uppdateringar till de andra, och den sista är rätt.
+    const before = stage.seen.filter((m) => m.t === 'state').length;
+    for (let i = 0; i < 300; i++) ghost.send({ t: 'choose', role: i % 2 ? 'audience' : 'judge' });
+    ghost.send({ t: 'ping', c: 2 });
+    await ghost.next((m) => m.t === 'pong' && m.c === 2);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const states = stage.seen.filter((m) => m.t === 'state');
+    assert.ok(states.length - before >= 1 && states.length - before <= 15, `${states.length - before} uppdateringar`);
+    assert.equal(states.at(-1).state.audience.length, 1);
+    assert.equal(states.at(-1).state.judges.length, 0);
+    const adminStates = admin.seen.filter((m) => m.t === 'state');
+    assert.equal(adminStates.at(-1).state.unseated, 0);
+    for (const c of [admin, stage, ghost]) c.ws.close();
+  } finally {
+    await app.close();
+  }
+});
+
+test('pinkoden går inte att gissa sig till: fel försök bromsar nästa, och värden som loggat in släpps in direkt', async () => {
+  const app = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), adminPin: '4321', pinDelay: 60 });
+  try {
+    // Fyra fel försök i rad, ett i taget: pauserna 60, 120 och 240 ms ligger mellan svaren.
+    const thief = client(app.port, { kind: 'admin', pin: '0000' });
+    const started = Date.now();
+    await thief.next((m) => m.t === 'denied');
+    for (const pin of ['0001', '0002', '0003']) {
+      const denied = thief.next((m) => m.t === 'denied');
+      thief.send({ t: 'hello', kind: 'admin', pin });
+      await denied;
+    }
+    assert.ok(Date.now() - started >= 400, `fyra försök tog ${Date.now() - started} ms`);
+
+    // Trettio förbindelser gissar samtidigt: bara en handfull får köa, resten nekas direkt utan att prövas.
+    const flood = Array.from({ length: 30 }, () => client(app.port, { kind: 'admin', pin: '9999' }));
+    await Promise.all(flood.map((c) => c.ready));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const denied = flood.filter((c) => c.seen.some((m) => m.t === 'denied')).length;
+    assert.ok(denied >= 24 && denied < 30, `${denied} av 30 nekades direkt`);
+    assert.equal(flood.filter((c) => c.seen.some((m) => m.t === 'welcome')).length, 0);
+    for (const c of [...flood, thief]) c.ws.close();
+  } finally {
+    await app.close();
+  }
+
+  const calm = await startServer({ port: 0, dataDir: mkdtempSync(path.join(tmpdir(), 'boardgames-')), adminPin: '4321', pinDelay: 60 });
+  try {
+    // Rätt kod släpper in direkt och ger en nyckel. Med nyckeln behövs ingen kod, och en påhittad nyckel hjälper inte.
+    const host = client(calm.port, { kind: 'admin', pin: '4321' });
+    const welcome = await host.next((m) => m.t === 'welcome');
+    assert.match(welcome.key, /^[0-9a-f]{32}$/);
+    const again = client(calm.port, { kind: 'admin', pin: 'fel', key: welcome.key });
+    assert.equal((await again.next((m) => m.t === 'welcome')).key, welcome.key);
+    const forged = client(calm.port, { kind: 'admin', pin: 'fel', key: 'a'.repeat(32) });
+    await forged.next((m) => m.t === 'denied');
+    const stage = client(calm.port, { kind: 'stage' });
+    const seen = await stage.next((m) => m.t === 'welcome');
+    assert.equal(seen.key, undefined, 'bara värden får en nyckel');
+
+    // Det som skickas direkt efter värdens hej kommer fram, i ordning.
+    const quick = client(calm.port, { kind: 'admin', pin: '4321' });
+    await quick.ready;
+    quick.send({ t: 'start' });
+    quick.send({ t: 'next' });
+    await quick.next((m) => m.t === 'state' && m.state.syna?.step === 'bid');
+    for (const c of [host, again, forged, stage, quick]) c.ws.close();
+  } finally {
+    await calm.close();
   }
 });
 

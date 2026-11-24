@@ -41,6 +41,9 @@ export function addDevice(room, token, id) {
   return room.devices[token];
 }
 
+// Under ett spel kan spelet låsa platserna en stund, till exempel medan buden är hemliga.
+const seatLocked = (room, dev, msg) => (room.phase === 'game' ? GAMES[room.game].seatLocked?.(room, dev, msg) ?? null : null);
+
 const clean = (s, max) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 function unseat(dev) {
@@ -57,6 +60,8 @@ export function apply(room, token, msg, isAdmin = false, now = Date.now(), rng =
       if (!dev) return 'okänd enhet';
       if (!ROLES.includes(msg.role)) return 'okänd roll';
       if (msg.role === 'team' && !room.teams.some((t) => t.id === msg.team)) return 'okänt lag';
+      const locked = seatLocked(room, dev, msg);
+      if (locked) return locked;
       dev.role = msg.role;
       dev.team = msg.role === 'team' ? msg.team : null;
       if (msg.name !== undefined) dev.name = clean(msg.name, 20);
@@ -64,6 +69,8 @@ export function apply(room, token, msg, isAdmin = false, now = Date.now(), rng =
     }
     case 'leave': {
       if (!dev) return 'okänd enhet';
+      const locked = seatLocked(room, dev, msg);
+      if (locked) return locked;
       unseat(dev);
       return null;
     }
