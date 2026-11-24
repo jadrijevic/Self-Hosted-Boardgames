@@ -7,6 +7,7 @@ Ritar varje läge från states.js på storbilden, mobilen och värdsidan och mä
 - lobbyn på storbilden: samma mått med wifi-kod och utan, med sex lag och med fyra, och hur breda koderna blir
 - mobilen, värdsidan och startsidan: ingenting sticker ut i sidled
 - länkarna mellan sidorna: storbilden och startsidan öppnar värdsidan i ett eget fönster
+- värdsidans knappar: att ångra kräver två tryck, och ett tryck på något annat avbryter
 - alla sidor: typsnittet som följer med appen är laddat, så att måtten gäller på alla skärmar
 
 Kräver Python med Playwright och en Chrome eller Chromium. Körs från repots rot:
@@ -206,6 +207,34 @@ def main():
                     if SHOTS and w != 360:
                         page.screenshot(path=str(SHOTS / f"{label.replace(' ', '-')}-{w}x{h}.png"), full_page=True)
                     page.context.close()
+
+            # Sist, eftersom det startar ett spel: värden ångrar ett steg med två tryck på riktiga knappar.
+            host = open_page("/admin", 390, 844, "#pinform")
+            host.fill("#pinform input", "1234")
+            host.click("#pinform button")
+            host.click("button[data-do=start]")
+            host.wait_for_selector("button[data-do=swapTask]")
+            undo = "button[data-do=undo]"
+            if host.query_selector(undo):
+                failures.append("värdsidan: ångra visas i spelets första steg")
+            host.click("button[data-do=next]")
+            host.wait_for_selector(undo)
+            want = "Ångra: tillbaka till uppdraget"
+            if host.inner_text(undo) != want:
+                failures.append(f"värdsidan: knappen säger {host.inner_text(undo)!r}")
+            host.click(undo)
+            if host.inner_text(undo) != "Säker? Tryck igen":
+                failures.append("värdsidan: första trycket på ångra ber inte om ett till")
+            host.click("button[data-do=bid] >> nth=0")
+            host.wait_for_function(f"document.querySelector('{undo}')?.textContent === '{want}'")
+            if host.query_selector("button[data-do=swapTask]"):
+                failures.append("värdsidan: ett tryck på ångra räckte")
+            host.click(undo)
+            host.click(undo)
+            host.wait_for_selector("button[data-do=swapTask]")
+            if host.query_selector(undo):
+                failures.append("värdsidan: ångra finns kvar efter att steget är ångrat")
+            host.context.close()
             browser.close()
             failures += [f"fel i sidan: {e}" for e in errors]
     finally:

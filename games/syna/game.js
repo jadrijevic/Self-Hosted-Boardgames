@@ -220,11 +220,57 @@ function advance(room, ctx, isJudge, now, rng) {
   }
 }
 
+// Ångra: läget före de senaste stegen sparas i s.history, och värden kan lägga tillbaka det.
+// Ett läge sparas när spelet lämnar ett steg, eller när uppdraget byts. Under ett försök sparas
+// inget, så det senast sparade läget är då alltid stunden före försöket: att ångra där är att
+// göra om försöket. Historiken innehåller hemliga bud och lämnar aldrig servern (se view).
+const HISTORY = 6;
+const stepKey = (s) => [s.round, s.step, s.turn, s.tasks[s.round], s.topic].join('|');
+
+function snapshot(room) {
+  const { history, ...syna } = room.syna;
+  return JSON.parse(JSON.stringify({ syna, records: room.records }));
+}
+
+// Lägger tillbaka i samma objekt, så att den som håller i läget ser det återställda.
+function restore(target, source) {
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, source);
+}
+
+function undo(room, ctx, msg) {
+  const s = room.syna;
+  // Kontrollanten får börja om ett försök som startats av misstag. Allt annat ångrar bara värden.
+  const judgeRestart = ctx.device?.role === 'judge' && s.step === 'play';
+  if (!ctx.isAdmin && !judgeRestart) return 'bara värden får ångra';
+  // Knappen säger vad som ångras. Har läget hunnit ändras gäller den inte längre.
+  if (msg.step !== undefined && msg.step !== s.step) return 'läget ändrades, försök igen';
+  const history = Array.isArray(s.history) ? s.history : [];
+  const last = history.at(-1);
+  if (!last?.syna || !last.records) return 'det finns inget att ångra';
+  restore(room.records, last.records);
+  restore(s, { ...last.syna, history: history.slice(0, -1) });
+  return null;
+}
+
 // Tar emot en avsikt under spelet. ctx = { device, isAdmin }.
 // Värden får agera åt ett lag (msg.team), så att kvällen klarar sig om en mobil saknas.
 export function apply(room, ctx, msg, now = Date.now(), rng = Math.random) {
   const s = room.syna;
   if (!s) return 'inget spel pågår';
+  if (msg.t === 'undo') return undo(room, ctx, msg);
+  const before = s.step === 'play' ? null : snapshot(room);
+  const key = stepKey(s);
+  const error = handle(room, ctx, msg, now, rng);
+  const after = room.syna;
+  if (!error && before && after && stepKey(after) !== key) {
+    after.history = [...(Array.isArray(after.history) ? after.history : []), before].slice(-HISTORY);
+  }
+  return error;
+}
+
+function handle(room, ctx, msg, now, rng) {
+  const s = room.syna;
   const task = taskOf(s);
   const duel = duelOf(s);
   const own = ctx.device?.role === 'team' ? ctx.device.team : null;
@@ -383,6 +429,9 @@ export function view(room, ctx) {
     final: { ...finalById(s.final.task), tries: s.final.tries, success: s.final.success },
   };
   if (isJudge && s.notes) out.notes = s.notes;
+  // Vad ett ångrande leder tillbaka till. Bara steget lämnas ut, aldrig det sparade läget.
+  const last = Array.isArray(s.history) ? s.history.at(-1) : null;
+  if (isJudge && last?.syna) out.back = { step: last.syna.step, round: last.syna.round };
   if (s.step === 'end') out.standings = standings(room);
   return out;
 }

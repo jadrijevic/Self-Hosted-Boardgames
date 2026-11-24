@@ -24,6 +24,8 @@ export function action(d) {
     case 'finalResult': return { t: 'finalResult', success: d.ok === '1' };
     case 'setMaterial': return { t: 'setMaterial', on: d.on === '1' };
     case 'next': case 'swapTask': case 'start': case 'endGame': return { t: d.do };
+    // Steget följer med, så att servern säger nej om läget har hunnit ändras.
+    case 'undo': return { t: 'undo', step: d.step };
     default: return null;
   }
 }
@@ -156,6 +158,17 @@ export function stage(s, now) {
 
 /* ---------------- kontrollant (och värd) ---------------- */
 
+// Vad som händer om värden ångrar, sagt som det står på knappen. null när det inte finns något att ångra.
+const STEP_NAMES = { intro: 'uppdraget', bid: 'budgivningen', call: 'synen', ready: 'före försöket', result: 'resultatet', score: 'rondens poäng', final: 'finalen' };
+export function undoLabel(g) {
+  if (!g.back) return null;
+  if (g.step === 'play') return 'Börja om försöket';
+  if (g.back.round !== g.round) return `Ångra: tillbaka till rond ${g.back.round + 1}`;
+  // Det senaste som hände var ett försök: tiden och räkningen nollställs för laget som just tävlade.
+  if (g.back.step === 'ready' && ['ready', 'result'].includes(g.step)) return 'Gör om försöket';
+  return `Ångra: tillbaka till ${STEP_NAMES[g.back.step] ?? 'förra steget'}`;
+}
+
 // Rondens ämne med uppdragets egen rubrik, till exempel "Rimord: Hatt".
 const topicText = (g) => `${esc(g.task.topicLabel ?? 'Ämne')}: ${esc(g.topic)}`;
 
@@ -176,7 +189,8 @@ export function judgePanel(s, now) {
         ? `<div class="jcount"><button class="minus" data-do="count" data-team="${t}" data-delta="-1">−1</button><span>${fmt(g.results[t] ?? 0)}</span><button class="plus1" data-do="count" data-team="${t}" data-delta="1">+1</button></div>`
         : (g.results[t] != null ? `<p class="lbl">Stoppad på ${fmt(g.results[t])} s</p>` : `<button class="plus1 wide" data-do="stop" data-team="${t}">${task.direction === 'low' ? 'Klara: stoppa tiden' : 'Stoppa tiden'}</button>`)}
       </div>`).join('')}
-      <button class="ghostbtn" data-do="next">Avbryt tiden</button></section>`;
+      <button class="ghostbtn" data-do="next">Avbryt tiden</button>
+      ${g.back ? `<button class="ghostbtn" data-do="undo" data-step="play">Startade tiden av misstag? Börja om försöket</button>` : ''}</section>`;
   }
   if (g.step === 'result') {
     return `<section class="jbox"><p class="lbl">Stämmer resultatet?</p>${[a, b].map((t) => {
@@ -306,6 +320,7 @@ export function admin(s, now, armed) {
       ? `<section class="card"><h2>Syna åt ett lag</h2>${g.watchers.map((w) => callPanel(s, w, true)).join('')}</section>`
       : '';
   const scores = [...s.teams].sort((x, y) => g.scores[y.id] - g.scores[x.id]);
+  const back = undoLabel(g);
   return `
     <section class="card">
       <h2>${['final', 'end'].includes(g.step) ? 'Finalen' : `Rond ${g.round + 1} av ${g.rounds}: ${esc(task.name)}`}</h2>
@@ -316,6 +331,9 @@ export function admin(s, now, armed) {
     </section>
     ${g.step === 'score' ? `<section class="card"><h2>Rondens poäng</h2>${roundRows(s, g)}</section>` : ''}
     ${judgePanel(s, now)}
+    ${back && g.step !== 'play' ? `<section class="card"><h2>Blev det fel?</h2>
+      <button class="btn ghost" data-do="undo" data-step="${g.step}" data-arm="1">${armed === 'undo' ? 'Säker? Tryck igen' : back}</button>
+      <p class="muted">${back === 'Gör om försöket' ? 'Tiden och räkningen nollställs för laget som just tävlade.' : 'Läget före det senaste steget läggs tillbaka: bud, syn, resultat och poäng.'}</p></section>` : ''}
     ${fallback}
     <section class="card">
       <h2>Ställning${g.hidden ? ' (dold för alla andra)' : ''}</h2>
@@ -323,7 +341,7 @@ export function admin(s, now, armed) {
     </section>
     <section class="card">
       <h2>Avsluta</h2>
-      <button class="btn warn" data-do="endGame" data-arm="1">${armed ? 'Säker? Tryck igen' : 'Avsluta spelet'}</button>
+      <button class="btn warn" data-do="endGame" data-arm="1">${armed === 'endGame' ? 'Säker? Tryck igen' : 'Avsluta spelet'}</button>
       <p class="muted">Tillbaka till lobbyn. Rekorden sparas.</p>
     </section>`;
 }
