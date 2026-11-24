@@ -132,19 +132,19 @@ export function stage(s, now) {
     case 'intro': return `${head}
       <div class="taskbig">${esc(task.name)}</div>
       <p class="tasktext">${esc(task.text)}</p>
-      ${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+      ${g.topic ? `<p class="topic">${topicText(g)}</p>` : ''}
       <div class="pills"><span class="pill role">${esc(task.role)}</span>${task.needs ? `<span class="pill">Material: ${esc(task.needs)}</span>` : ''}${task.mode === 'turns' ? `<span class="pill">${TURNS}</span>` : ''}</div>
       <p class="vs">${lag(s, a)} mot ${lag(s, b)}</p>
       <p class="rec">${recordLine(g)}</p>`;
-    case 'bid': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+    case 'bid': return `${head}${g.topic ? `<p class="topic">${topicText(g)}</p>` : ''}
       ${tiles((t) => `<div class="dv small">${g.bids[t].locked ? 'Låst' : 'Budar …'}</div>`)}
       <p class="foot2">Buden visas när båda lagen har låst.</p>`;
     case 'call': return `${head}${tiles(bid)}
       <p class="foot2">${deciding(s, g)}</p>`;
-    case 'ready': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}
+    case 'ready': return `${head}${g.topic ? `<p class="topic">${topicText(g)}</p>` : ''}
       ${tiles((t) => bid(t) + callers(s, g, t))}
       <p class="foot2">${task.mode === 'turns' ? `${lag(s, g.order[g.turn])} står på tur.` : 'Båda lagen samtidigt.'} Kontrollanten startar tiden.</p>`;
-    case 'play': return `${head}${g.topic ? `<p class="topic">Ämne: ${esc(g.topic)}</p>` : ''}${clock(g, now)}
+    case 'play': return `${head}${g.topic ? `<p class="topic">${topicText(g)}</p>` : ''}${clock(g, now)}
       ${tiles((t) => `<div class="dv${task.measure === 'time' && g.results[t] == null ? ' small' : ''}">${live(g, t)}</div><div class="ds">bud ${fmt(g.bids[t].value)} ${esc(task.unit)}</div>${callers(s, g, t)}`)}`;
     case 'result': return `${head}<p class="over">Tiden är ute</p>
       ${tiles((t) => `<div class="dv small">${result(g, t)}</div><div class="ds">bud ${fmt(g.bids[t].value)} ${esc(task.unit)}</div>${callers(s, g, t)}`)}
@@ -155,6 +155,9 @@ export function stage(s, now) {
 }
 
 /* ---------------- kontrollant (och värd) ---------------- */
+
+// Rondens ämne med uppdragets egen rubrik, till exempel "Rimord: Hatt".
+const topicText = (g) => `${esc(g.task.topicLabel ?? 'Ämne')}: ${esc(g.topic)}`;
 
 export function judgePanel(s, now) {
   const g = s.syna;
@@ -242,7 +245,7 @@ export function player(s, now) {
     return head + card(winners(s, g), row ? `Ni kom på plats ${row.place} med ${fmt(row.score)} poäng.` : '') + standings(s, g);
   }
 
-  const topic = g.topic && g.step !== 'result' && g.step !== 'score' ? `<p class="ptopic">Ämne: ${esc(g.topic)}</p>` : '';
+  const topic = g.topic && g.step !== 'result' && g.step !== 'score' ? `<p class="ptopic">${topicText(g)}</p>` : '';
   const top = head + topic;
   // Kontrollanten har egna knappar när tiden ska startas, räknas och godkännas. Annars ser den samma som publiken.
   const panel = me.role === 'judge' ? judgePanel(s, now) : '';
@@ -306,7 +309,7 @@ export function admin(s, now, armed) {
   return `
     <section class="card">
       <h2>${['final', 'end'].includes(g.step) ? 'Finalen' : `Rond ${g.round + 1} av ${g.rounds}: ${esc(task.name)}`}</h2>
-      <p class="muted">${g.step === 'final' ? esc(g.final.text) : g.step === 'end' ? 'Spelet är slut.' : `${lag(s, g.duel[0])} mot ${lag(s, g.duel[1])}${g.topic ? ` · ämne: ${esc(g.topic)}` : ''}${task.needs ? ` · material: ${esc(task.needs)}` : ''}`}</p>
+      <p class="muted">${g.step === 'final' ? esc(g.final.text) : g.step === 'end' ? 'Spelet är slut.' : `${lag(s, g.duel[0])} mot ${lag(s, g.duel[1])}${g.topic ? ` · ${topicText(g)}` : ''}${task.needs ? ` · material: ${esc(task.needs)}` : ''}`}</p>
       ${g.step === 'intro' ? `<p class="txt">${esc(task.text)}</p><p class="txt">${esc(task.role)}</p>` : ''}
       ${main}
       ${g.step === 'intro' ? '<button class="btn ghost" data-do="swapTask">Byt uppdrag</button>' : ''}

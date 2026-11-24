@@ -30,6 +30,7 @@ function plan(g, r) {
   };
 }
 
+// Ordet tv för sig, inte bokstäverna i "två": \b räknar inte å, ä och ö som bokstäver.
 test('mobilen visar allt som behövs i varje steg av en rond', () => {
   const g = setup(4, 7);
   g.admin({ t: 'start' });
@@ -43,7 +44,7 @@ test('mobilen visar allt som behövs i varje steg av en rond', () => {
     seen.push(step);
     for (const who of everyone) {
       const text = phone(g, who);
-      assert.doesNotMatch(text, /\btv\b|tv:n|storbild/i, `${step}, ${who}`);
+      assert.doesNotMatch(text, /(?<!\p{L})tv(?!\p{L})|storbild/iu, `${step}, ${who}`);
       assert.ok(text.includes(`${lag(g, a)} mot ${lag(g, b)}`), `${step}, ${who}: vilka som möts`);
     }
     const others = everyone.filter((who) => who !== 'judge');
@@ -135,7 +136,7 @@ test('mobilen visar ställningen efter varje rond, döljer den i sista varvet oc
     const text = phone(g, who);
     assert.ok(text.includes(`${winner} vinner`), `${who} ser vinnaren`);
     for (const row of rows) assert.ok(text.includes(`${row.place}. ${lag(g, row.team)} ${num(row.score)}`), `${who} ser hela slutställningen`);
-    assert.doesNotMatch(text, /\btv\b|tv:n|storbild/i);
+    assert.doesNotMatch(text, /(?<!\p{L})tv(?!\p{L})|storbild/iu);
   }
   const last = rows.at(-1);
   assert.ok(phone(g, last.team).includes(`Ni kom på plats ${last.place} med ${num(last.score)} poäng.`));
@@ -157,6 +158,14 @@ test('ämnet står på mobilen när uppdraget har ett ämne', () => {
   g.as(a, { t: 'lockBid' });
   g.as(b, { t: 'lockBid' });
   assert.ok(phone(g, watcher).includes(`Ämne: ${s.topic}`), 'laget som synar ser ämnet');
+
+  // Ett uppdrag kan ge ämnet en egen rubrik, som säger vad det är.
+  s.tasks[1] = 'rimmet';
+  s.round = 1;
+  beginRound(g.room, g.rng);
+  const [c] = s.schedule[1];
+  assert.ok(phone(g, c).includes(`Rimord: ${s.topic}`), phone(g, c));
+  assert.ok(!phone(g, c).includes('Ämne:'));
 });
 
 test('värden kan läsa upp uppdraget och rondens poäng utan storbild', () => {

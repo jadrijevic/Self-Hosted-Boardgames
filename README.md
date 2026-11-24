@@ -16,6 +16,7 @@ Det här fungerar:
 - Läget sparas på disk och överlever en omstart.
 - Schemaläggaren för Syna: vilka lag som möts vid 2–6 lag.
 - Ronderna: uppdrag, hemliga bud, syn, nedräkning, resultat och poäng.
+- 18 uppdrag. 15 kräver inget material: fem var av sorterna kropp, röst och huvud. Svårigheten och budens spann är inte provade med människor.
 - Kontrollanten räknar godkända eller stoppar tiden från sin mobil.
 - Värden går vidare mellan stegen, kan byta uppdrag och kan lägga bud eller syna åt ett lag som saknar mobil.
 - Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
@@ -130,7 +131,7 @@ Skärmlåset i mobilen kräver https. Det löses med en omvänd proxy framför c
 npm test
 ```
 
-Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Ett slumpprov skickar 30 000 trasiga och giltiga meddelanden genom alla steg och kräver att spellogiken aldrig kastar ett undantag.
+Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 30 000 trasiga och giltiga meddelanden genom alla steg och kräver att spellogiken aldrig kastar ett undantag.
 
 Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart. CI kör också installationsskriptet mot riktig Docker och Compose, med ett wifi-lösenord fullt av specialtecken, och kräver att det kommer fram oförändrat till containern. Unraid och Compose Manager provas inte.
 
