@@ -4,7 +4,9 @@
 Ritar varje läge från states.js på storbilden, mobilen och värdsidan och mäter:
 - storbilden: inget hamnar utanför bilden, inget innehåll är bredare än sin ruta och
   ingen text är mindre än 3,5 % av bildhöjden (i 16:9 och 16:10)
-- mobilen och värdsidan: ingenting sticker ut i sidled
+- lobbyn på storbilden: samma mått med wifi-kod och utan, med sex lag och med fyra, och hur breda koderna blir
+- mobilen, värdsidan och startsidan: ingenting sticker ut i sidled
+- länkarna mellan sidorna: storbilden och startsidan öppnar värdsidan i ett eget fönster
 - alla sidor: typsnittet som följer med appen är laddat, så att måtten gäller på alla skärmar
 
 Kräver Python med Playwright och en Chrome eller Chromium. Körs från repots rot:
@@ -46,8 +48,8 @@ MEASURE = """
     margin = Math.min(margin, r.top, vh - r.bottom);
     if (r.top < -0.5 || r.bottom > vh + 0.5) bad.add(name + ': utanför bilden i höjdled');
     const text = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
-    // Knappen för husets röst är värdens egen och får vara mindre.
-    if (text && !el.classList.contains('voice') && parseFloat(getComputedStyle(el).fontSize) < min) bad.add(name + ': text under 3,5 % av bildhöjden');
+    // Värdens egna knappar på storbilden får vara mindre.
+    if (text && !el.classList.contains('ctl') && parseFloat(getComputedStyle(el).fontSize) < min) bad.add(name + ': text under 3,5 % av bildhöjden');
   }
   // Måtten gäller bara om sidan ritas med typsnittet som följer med appen, inte med ett som råkar finnas här.
   const own = [...document.fonts].some((f) => f.family.replace(/"/g, '') === 'Syna' && f.status === 'loaded');
@@ -82,7 +84,19 @@ async ({ state, now, host }) => {
 }
 """ % MEASURE
 
-LOBBY = "() => (%s)(document.body, true)" % MEASURE
+LOBBY = """
+() => {
+  const res = (%s)(document.body, true);
+  // Kodernas bredd avgör hur långt ifrån de går att skanna.
+  res.codes = [...document.querySelectorAll('.join img')].filter((i) => i.offsetWidth).map((i) => Math.round((i.offsetWidth / innerWidth) * 1000) / 10);
+  return res;
+}
+""" % MEASURE
+
+PAGE = "() => (%s)(document.body, false)" % MEASURE
+
+# Ett nätnamn på 32 tecken, det längsta som finns, och ett långt lösenord: den tätaste koden och den längsta texten.
+WIFI = {"WIFI_SSID": "Gästnätet på övervåningen jul 26", "WIFI_PASSWORD": "ett-langt-losenord-for-provet-0123456789"}
 
 
 def main():
@@ -90,9 +104,9 @@ def main():
     cases = data["cases"]
     tmp = tempfile.mkdtemp(prefix="layout-")
     pathlib.Path(tmp, "room.json").write_text(json.dumps(data["lobby"]))
-    env = dict(os.environ, PORT=PORT, DATA_DIR=tmp, ADMIN_PIN="1234")
+    env = dict(os.environ, PORT=PORT, DATA_DIR=tmp, ADMIN_PIN="1234", **WIFI)
     server = subprocess.Popen(["node", "server/index.js"], cwd=ROOT, env=env, stdout=subprocess.DEVNULL)
-    failures, lobby, tightest, tall = [], {}, {}, {}
+    failures, lobby, codes, tightest, tall = [], {}, {}, {}, {}
     try:
         for _ in range(50):
             try:
@@ -106,22 +120,36 @@ def main():
             browser = p.chromium.launch(executable_path=os.environ.get("CHROME") or None, args=["--no-sandbox"])
             errors = []
 
-            def open_page(path, w, h, wait):
+            # Servern har ett gästnät inställt. Med wifi=False får sidan svaret att inget är inställt.
+            def open_page(path, w, h, wait, wifi=True):
                 page = browser.new_context(viewport={"width": w, "height": h}).new_page()
                 page.on("pageerror", lambda e: errors.append(f"{path}: {e}"))
+                if not wifi:
+                    page.route("**/wifi", lambda route: route.fulfill(json={"ssid": None}))
                 page.goto(URL + path)
                 page.wait_for_selector(wait)
+                page.wait_for_function("[...document.images].filter((i) => i.getAttribute('src')).every((i) => i.complete && i.naturalWidth)")
                 page.wait_for_timeout(300)
+                return page
+
+            def check_lobby(w, h, teams, wifi):
+                size, label = f"{w}x{h}", f"lobbyn med {teams} lag" + (" och wifi-kod" if wifi else "")
+                page = open_page("/scen", w, h, "body.wifi #wificode:not([hidden])" if wifi else ".tile", wifi)
+                page.wait_for_function(f"document.querySelectorAll('.tile').length === {teams}")
+                res = page.evaluate(LOBBY)
+                lobby[size, wifi] = min(res["margin"], lobby.get((size, wifi), 100))
+                codes[size, teams, wifi] = res["codes"]
+                failures.extend(f"storbild {size}, {label}: {b}" for b in res["bad"])
+                if len(res["codes"]) != (2 if wifi else 1):
+                    failures.append(f"storbild {size}, {label}: {len(res['codes'])} koder visas")
+                if SHOTS:
+                    page.screenshot(path=str(SHOTS / f"scen-{label.replace(' ', '-')}-{size}.png"))
                 return page
 
             for w, h in STAGE_SIZES:
                 size = f"{w}x{h}"
-                page = open_page("/scen", w, h, ".tile")
-                res = page.evaluate(LOBBY)
-                lobby[size] = res["margin"]
-                failures += [f"storbild {size}, lobbyn: {b}" for b in res["bad"]]
-                if SHOTS:
-                    page.screenshot(path=str(SHOTS / f"scen-lobby-{size}.png"))
+                check_lobby(w, h, 6, True).context.close()
+                page = check_lobby(w, h, 6, False)
                 for c in cases:
                     res = page.evaluate(STAGE, {"state": c["stage"], "now": c["now"]})
                     failures += [f"storbild {size}, {c['name']}: {b}" for b in res["bad"]]
@@ -148,6 +176,36 @@ def main():
                             pg.screenshot(path=str(SHOTS / f"{label.replace(' ', '-')}-{c['name']}.png"), full_page=True)
                 page.context.close()
                 host.context.close()
+
+            # Värden loggar in och minskar till fyra lag, som en riktig värd gör. Då får koderna mer plats.
+            host = open_page("/admin", 390, 844, "#pinform")
+            host.fill("#pinform input", "1234")
+            host.click("#pinform button")
+            for left in (5, 4):
+                host.click("button[data-do=teams] >> nth=0")
+                host.wait_for_function(f"document.querySelector('.step span')?.textContent === '{left}'")
+            host.context.close()
+            for w, h in STAGE_SIZES:
+                check_lobby(w, h, 4, True).context.close()
+                check_lobby(w, h, 4, False).context.close()
+
+            # Länkarna som gör att bara startsidans adress behöver kommas ihåg.
+            for path, link, target in (("/scen", "a[href='/admin']", "/admin"), ("/scen", "a[href='/start']", "/start"),
+                                       ("/start", "a[href='/admin']", "/admin"), ("/start", "a[href='/scen']", "/scen")):
+                page = open_page(path, 1280, 720, link)
+                with page.expect_popup() as opened:
+                    page.click(link)
+                if not opened.value.url.endswith(target):
+                    failures.append(f"länken {link} på {path} öppnade {opened.value.url}")
+                page.context.close()
+
+            for w, h in PHONE_SIZES + [(1280, 720)]:
+                for label, wifi in (("startsidan med gästnät", True), ("startsidan", False)):
+                    page = open_page("/start", w, h, "#wifistep:not([hidden])" if wifi else "h1", wifi)
+                    failures += [f"{label} {w}x{h}: {b}" for b in page.evaluate(PAGE)["bad"]]
+                    if SHOTS and w != 360:
+                        page.screenshot(path=str(SHOTS / f"{label.replace(' ', '-')}-{w}x{h}.png"), full_page=True)
+                    page.context.close()
             browser.close()
             failures += [f"fel i sidan: {e}" for e in errors]
     finally:
@@ -155,7 +213,8 @@ def main():
 
     print(f"{len(cases)} lägen provade på storbild ({', '.join(f'{w}x{h}' for w, h in STAGE_SIZES)}) och mobil ({', '.join(f'{w}x{h}' for w, h in PHONE_SIZES)})")
     for size, (name, margin) in tightest.items():
-        print(f"storbild {size}: minsta luft över och under innehållet är {margin} % av bildhöjden i spelet ({name}) och {lobby[size]} % i lobbyn")
+        print(f"storbild {size}: minsta luft över och under innehållet är {margin} % av bildhöjden i spelet ({name}), {lobby[size, False]} % i lobbyn och {lobby[size, True]} % i lobbyn med wifi-kod")
+        print(f"storbild {size}: koden är {codes[size, 6, False][0]} % av bildbredden. Med wifi-kod är de två koderna {codes[size, 4, True][0]} % var med fyra lag och {codes[size, 6, True][0]} % med sex")
     for (size, label), (name, height) in sorted(tall.items()):
         print(f"{label} {size}: högsta sidan är {height} px och kräver rullning ({name})")
     if failures:

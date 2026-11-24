@@ -10,10 +10,13 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { newRoom, addDevice, apply, viewFor, prune, isValidRoom, normalize, tick } from './room.js';
+import { wifiPayload } from './wifi.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC = path.join(ROOT, 'public');
-const PAGES = { '/': 'index.html', '/scen': 'scen.html', '/admin': 'admin.html' };
+const PAGES = { '/': 'index.html', '/scen': 'scen.html', '/admin': 'admin.html', '/start': 'start.html' };
+// Sidor som en QR-kod får peka på, utöver mobilsidan.
+const QR_TARGETS = { admin: '/admin', scen: '/scen', start: '/start' };
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -43,8 +46,12 @@ function load(file) {
   return newRoom();
 }
 
+// Sätter en omvänd proxy sådana här rubriker kommer anropet inte direkt från nätet hemma.
+const PROXY_HEADERS = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'];
+
 // logic går att byta ut i tester. I drift är det alltid spellogiken i room.js.
-export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '', logic = { apply, tick } } = {}) {
+// wifi är gästnätets namn och lösenord ({ ssid, password }), eller null. Med wifi visar storbilden en wifi-kod före spelets kod.
+export async function startServer({ port = 8080, dataDir = './data', adminPin, publicUrl = '', wifi = null, logic = { apply, tick } } = {}) {
   mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, 'room.json');
   const pin = adminPin ? String(adminPin) : String(randomInt(1000, 10000));
@@ -77,6 +84,9 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   }
 
   const joinUrl = (req) => publicUrl || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers.host}`;
+  // Wifi-koden är nätets lösenord i klartext. Den lämnas ut till den som når servern direkt, och som alltså redan
+  // är på nätet hemma, men aldrig genom en omvänd proxy. Görs spelet nåbart utifrån den vägen följer lösenordet inte med.
+  const wifiFor = (req) => (wifi && !PROXY_HEADERS.some((h) => req.headers[h]) ? wifi : null);
   // Sidorna hämtas alltid på nytt, så att en uppdatering syns direkt. Typsnittet ändras inte och får ligga kvar en vecka.
   const reply = (res, code, type, body) => {
     res.writeHead(code, { 'Content-Type': type, 'Cache-Control': type === TYPES['.woff2'] ? 'public, max-age=604800' : 'no-cache' });
@@ -85,7 +95,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
 
   const server = http.createServer(async (req, res) => {
     try {
-      const { pathname } = new URL(req.url, 'http://localhost');
+      const { pathname, searchParams } = new URL(req.url, 'http://localhost');
       if (pathname === '/halsa') return reply(res, 200, 'text/plain; charset=utf-8', 'ok');
       // Läget i korthet, utan hemligheter. Uppdateringsskriptet läser det för att inte starta om mitt i ett spel.
       if (pathname === '/lage') {
@@ -94,8 +104,17 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
       }
       if (pathname === '/adress') return reply(res, 200, 'text/plain; charset=utf-8', joinUrl(req));
       if (pathname === '/qr.svg') {
-        const svg = await QRCode.toString(joinUrl(req), { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+        const target = joinUrl(req) + (QR_TARGETS[searchParams.get('till')] ?? '');
+        const svg = await QRCode.toString(target, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
         return reply(res, 200, TYPES['.svg'], svg);
+      }
+      if (pathname === '/wifi') return reply(res, 200, 'application/json; charset=utf-8', JSON.stringify({ ssid: wifiFor(req)?.ssid ?? null }));
+      if (pathname === '/wifi.svg') {
+        const net = wifiFor(req);
+        if (!net) return reply(res, 404, 'text/plain; charset=utf-8', 'Finns inte');
+        const svg = await QRCode.toString(wifiPayload(net), { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+        res.writeHead(200, { 'Content-Type': TYPES['.svg'], 'Cache-Control': 'no-store' }); // lösenordet ska inte ligga kvar i webbläsarens cache
+        return res.end(svg);
       }
       const name = PAGES[pathname] ?? pathname.slice(1);
       if (!/^[a-z0-9-]+\.[a-z0-9]+$/i.test(name)) return reply(res, 404, 'text/plain; charset=utf-8', 'Finns inte');

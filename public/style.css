@@ -34,8 +34,16 @@ h1{margin:0;font-size:2rem;font-weight:800;letter-spacing:-.02em}
 .stage main{flex:1;display:grid;grid-template-columns:34vw 1fr;gap:5vw;align-items:center;min-height:0}
 .join{text-align:center}
 .join img{width:30vw;max-height:52vh;background:#fff;padding:1.6vh;border-radius:3vh;box-shadow:0 2vh 5vh rgba(27,36,48,.10)}
+/* Med ett gästnät inställt: wifi-koden och spelets kod bredvid varandra, i den ordning de skannas.
+   Koderna ska gå att skanna på håll och får så mycket bredd som lagen kan avvara: med upp till fyra lag
+   står lagen i en kolumn och koderna får nästan halva bilden, med fem eller sex lag behåller lagen sin bredd. */
+.stage.wifi main{grid-template-columns:36vw 1fr;gap:3vw}
+.stage.wifi .join{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2vw;align-items:start}
+.stage.wifi .join img{display:block;width:100%;max-height:none}
+.stage.wifi.few main{grid-template-columns:46vw 1fr}
+.stage.wifi.few .tiles{grid-template-columns:minmax(0,1fr)}
 .how{margin-top:2.4vh;font-size:3.6vh;font-weight:800}
-.url{margin-top:.8vh;font-size:var(--min);font-weight:600;color:var(--muted);word-break:break-all}
+.url{margin-top:.8vh;font-size:var(--min);font-weight:600;color:var(--muted);overflow-wrap:anywhere}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2.4vh}
 .tile{min-width:0;padding:2.4vh 1.6vw;border-radius:3vh;background:#fff;border-left:1.4vw solid var(--c);box-shadow:0 1.6vh 4vh rgba(27,36,48,.08)}
 .tile .n{font-size:clamp(3.5vh,2.3vw,4.2vh);font-weight:900;overflow-wrap:anywhere}
@@ -63,7 +71,8 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 .err{color:var(--red);font-weight:700;min-height:1.3em}
 
 /* ---- spelet: storbild ---- */
-.voice{margin-left:auto;padding:1vh 1.6vw;border-radius:999px;border:.3vh solid var(--ink);font-size:2.2vh;font-weight:700}
+.ctls{margin-left:auto;display:flex;gap:.8vw}
+.ctl{padding:1vh 1.6vw;border-radius:999px;border:.3vh solid var(--ink);font-size:2.2vh;font-weight:700;color:inherit;text-decoration:none}
 .stage.ingame header,.stage.ingame #lobby{display:none}
 #game{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.4vh;min-height:0}
 #game[hidden]{display:none}
@@ -166,3 +175,13 @@ input{font:inherit;padding:10px 12px;border-radius:12px;border:2px solid var(--l
 .note{margin:0;padding:12px;border-radius:14px;background:#FFE7A3;font-size:1.05rem;line-height:1.35}
 #toast{position:fixed;left:12px;right:12px;top:12px;padding:12px 16px;border-radius:14px;background:var(--red);color:#fff;font-weight:700;text-align:center}
 .btn.big2{display:block;width:100%;padding:16px;font-size:1.2rem;margin:10px 0}
+
+/* ---- startsidan ---- */
+.start main>.muted{margin:-10px 0 0}
+.start a.btn{text-align:center;text-decoration:none}
+.start .qrrow{display:flex;align-items:center;gap:14px;margin:6px 0 12px}
+.start .qrrow img{width:160px;height:160px;flex:none;border:2px solid var(--line);border-radius:12px;padding:6px;background:#fff}
+.start .qrrow p{margin:0}
+.start pre{margin:8px 0 0;padding:10px 12px;border-radius:12px;background:#F0E9DC;font-size:.8rem;white-space:pre-wrap;word-break:break-all}
+.start summary{cursor:pointer;font-weight:700}
+.start ul{padding-left:20px;display:grid;gap:8px}

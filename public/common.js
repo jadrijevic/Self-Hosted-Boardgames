@@ -54,6 +54,16 @@ export function connect(kind, handlers = {}) {
   };
 }
 
+// Länkar med data-popup öppnas i ett eget litet fönster, som går att lägga på en annan skärm än storbilden.
+// Stoppar webbläsaren fönstret öppnas länken som vanligt.
+export function popups() {
+  for (const a of document.querySelectorAll('a[data-popup]')) {
+    a.addEventListener('click', (e) => {
+      if (window.open(a.href, a.target, 'popup,width=480,height=900')) e.preventDefault();
+    });
+  }
+}
+
 // Nedräkningar: element med data-ends räknar ner mot serverns sluttid.
 export function runClocks(now) {
   setInterval(() => {

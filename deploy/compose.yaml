@@ -10,6 +10,9 @@ services:
     # ska läka på några sekunder. Läget ligger på disk och mobilerna ansluter igen av sig själva.
     # Efter tre försök stannar containern, så att ett bestående fel syns i containerlarmet.
     restart: on-failure:3
+    labels:
+      # Länken WebUI på containern i Unraids Docker-flik öppnar startsidan
+      net.unraid.docker.webui: "http://[IP]:[PORT:8080]/start"
     user: "99:100"
     env_file: .env
     environment:

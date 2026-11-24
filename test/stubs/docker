@@ -20,9 +20,11 @@ case "${1:-}" in
           kill "$(cat "$STUB/pid")"
           while kor; do sleep 0.05; done
         fi
+        # Egen session, som en container: servern ska leva kvar när terminalen som startade den stängs.
         PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
           ADMIN_PIN="$(envv ADMIN_PIN)" PUBLIC_URL="$(envv PUBLIC_URL)" \
-          nohup node "$REPO/server/index.js" > "$STUB/server.log" 2>&1 &
+          WIFI_SSID="$(envv WIFI_SSID)" WIFI_PASSWORD="$(envv WIFI_PASSWORD)" \
+          setsid node "$REPO/server/index.js" > "$STUB/server.log" 2>&1 &
         echo $! > "$STUB/pid"
         cp "$STUB/avbild-id" "$STUB/container-avbild"
         exit 0 ;;
@@ -53,6 +55,6 @@ case "${1:-}" in
   exec)
     # docker exec boardgames node deploy/kontroll.js
     cd "$REPO" && PORT="$(envv BOARDGAMES_PORT)" DATA_DIR="$POOL_APPDATA/boardgames/data" \
-      ADMIN_PIN="$(envv ADMIN_PIN)" node deploy/kontroll.js ;;
+      ADMIN_PIN="$(envv ADMIN_PIN)" WIFI_SSID="$(envv WIFI_SSID)" node deploy/kontroll.js ;;
   *) exit 0 ;;
 esac

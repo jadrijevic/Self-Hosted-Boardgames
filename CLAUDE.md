@@ -6,6 +6,7 @@ Egna sällskapsspel för Boris familj, körda på hans Unraid-server och spelade
 
 - Servern äger hela spelläget. Klienter skickar avsikter och ritar om sig från hela läget.
 - Allt en klient får se går genom `viewFor` i `server/room.js`. Hemligheter (token, hemliga bud) filtreras där.
+- Pinkoden och gästnätets lösenord står bara i projektets `.env` på servern. Wifi-koden lämnas aldrig ut genom en omvänd proxy.
 - Spellogik hålls ren och utan nätverk, så att den går att testa för sig.
 - Inget byggsteg och så få beroenden som möjligt. Sidorna är ren HTML och JavaScript.
 - Spelet ska tåla att en mobil somnar, laddas om eller byts ut mitt i en rond.

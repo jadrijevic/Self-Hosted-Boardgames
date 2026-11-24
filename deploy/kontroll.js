@@ -56,6 +56,7 @@ await page('/halsa', 'ok', 'servern svarar');
 await page('/', 'id="app"', 'mobilsidan');
 await page('/scen', 'id="game"', 'storbilden');
 await page('/admin', 'id="app"', 'värdsidan');
+await page('/start', 'kom igång', 'startsidan');
 await page('/syna.js', 'export function player', 'spelets vyer');
 await page('/qr.svg', '<svg', 'QR-koden');
 
@@ -84,6 +85,9 @@ try {
 } catch {
   fel('/lage svarar inte med läget');
 }
+
+if (process.env.WIFI_SSID) await page('/wifi.svg', '<svg', `wifi-koden till nätet ${process.env.WIFI_SSID}`);
+else console.log('  ..      ingen wifi-kod är inställd (WIFI_SSID)');
 
 if (process.env.ADMIN_PIN) ok('värdens pinkod är fast (ADMIN_PIN)');
 else varn('ADMIN_PIN saknas: värdens pinkod slumpas vid varje start och står i loggen');

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syna – kom igång</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin start">
+<main>
+  <h1>Syna – kom igång</h1>
+  <p class="muted" id="now">Den här sidan länkar till allt. Spara den som bokmärke.</p>
+  <section class="card" id="wifistep" hidden>
+    <h2>Gästnätet</h2>
+    <p class="txt">Slå på gästnätet <b id="ssid"></b> i routern före kvällen, och stäng av det efteråt. Storbilden visar en wifi-kod till det.</p>
+  </section>
+  <section class="card">
+    <h2>1. Storbilden</h2>
+    <p class="txt">Öppna den på datorn som är kopplad till projektorn eller tv:n. Lägg fönstret på storbilden och tryck F11 för helskärm.</p>
+    <a class="btn big2" href="/scen" target="syna-scen">Öppna storbilden</a>
+    <p class="muted">Husets röst slås på med knappen uppe till höger på storbilden.</p>
+  </section>
+  <section class="card">
+    <h2>2. Värden</h2>
+    <p class="txt">Värden startar spelet och går vidare mellan stegen, från den här datorn eller från en mobil. Sidan frågar efter pinkoden första gången. Sedan minns webbläsaren den.</p>
+    <a class="btn big2" href="/admin" target="syna-vard" data-popup>Öppna värdsidan här</a>
+    <div class="qrrow">
+      <img src="/qr.svg?till=admin" alt="QR-kod till värdsidan">
+      <p class="muted">Eller skanna koden med mobilen och styr därifrån.</p>
+    </div>
+    <details>
+      <summary>Glömt pinkoden?</summary>
+      <p class="muted">Den står i projektets .env på servern. Skriv i Unraids terminal:</p>
+      <pre>grep ADMIN_PIN /boot/config/plugins/compose.manager/projects/boardgames/.env</pre>
+    </details>
+  </section>
+  <section class="card">
+    <h2>3. Lagen</h2>
+    <p class="txt" id="scan">Varje lag skannar koden på storbilden med mobilkameran och väljer sitt lag. En mobil per lag räcker.</p>
+    <p class="txt">En person väljer ”Jag är kontrollant” och räknar och tar tid under ronderna. Övriga kan välja ”Jag är publik”.</p>
+  </section>
+  <section class="card">
+    <h2>4. Starta</h2>
+    <p class="txt">När lagen står som Redo på storbilden trycker värden på Starta spelet.</p>
+  </section>
+  <section class="card">
+    <h2>Om något krånglar</h2>
+    <ul class="txt">
+      <li>En mobil har tappat kontakten: ladda om sidan. Den får tillbaka sin plats.</li>
+      <li>Ett lag saknar mobil: värden kan lägga bud och syna åt laget från värdsidan.</li>
+      <li>Ingen är kontrollant: värden har kontrollantens knappar på sin sida.</li>
+      <li>Storbilden fungerar inte: mobilerna visar allt, och värden läser upp uppdraget från sin sida.</li>
+      <li>Uppdraget passar inte: värden trycker Byt uppdrag innan buden läggs.</li>
+      <li>Ett gammalt spel ligger kvar: värden trycker Avsluta spelet, eller Nollställ kvällen i lobbyn.</li>
+    </ul>
+  </section>
+</main>
+<script type="module">
+import { popups } from '/common.js';
+
+popups();
+const now = document.getElementById('now');
+const address = `${location.host}/start`;
+fetch('/lage').then((r) => r.json()).then(({ phase, online }) => {
+  const state = phase === 'game' ? 'Ett spel pågår.' : 'Spelet väntar i lobbyn.';
+  now.textContent = `${state} ${online} ${online === 1 ? 'skärm är ansluten' : 'skärmar är anslutna'}. Adressen hit är ${address}. Spara den som bokmärke.`;
+}).catch(() => {});
+fetch('/wifi').then((r) => r.json()).then(({ ssid }) => {
+  if (!ssid) return;
+  document.getElementById('ssid').textContent = ssid;
+  document.getElementById('wifistep').hidden = false;
+  document.getElementById('scan').textContent = 'Varje lag skannar först wifi-koden på storbilden, sedan spelets kod, och väljer sitt lag. En mobil per lag räcker.';
+}).catch(() => {});
+</script>
+</body>
+</html>
