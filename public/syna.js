@@ -22,7 +22,7 @@ export function action(d) {
     case 'stop': return { t: 'stop', team: d.team };
     case 'setResult': return { t: 'setResult', team: d.team, value: Number(d.v) };
     case 'finalResult': return { t: 'finalResult', success: d.ok === '1' };
-    case 'setMaterial': return { t: 'setMaterial', on: d.on === '1' };
+    case 'setMaterial': case 'setLong': return { t: d.do, on: d.on === '1' };
     case 'next': case 'swapTask': case 'start': case 'endGame': return { t: d.do };
     // Steget följer med, så att servern säger nej om läget har hunnit ändras.
     case 'undo': return { t: 'undo', step: d.step };
@@ -176,7 +176,7 @@ export function judgePanel(s, now) {
   const g = s.syna;
   const task = g.task;
   const [a, b] = g.duel;
-  const note = (t) => (g.notes ? `<p class="note">Viska till ${lag(s, t)}s yngsta:<br><b>${esc(g.notes[t])}</b></p>` : '');
+  const note = (t) => (g.notes ? `<p class="note">Viska till den första i ${lag(s, t)}:<br><b>${esc(g.notes[t])}</b></p>` : '');
   if (g.step === 'ready') {
     const next = task.mode === 'turns' ? g.order[g.turn] : null;
     return `<section class="jbox">${next ? `<p class="lbl">${lag(s, next)} står på tur</p>${note(next)}` : '<p class="lbl">Båda lagen samtidigt</p>'}

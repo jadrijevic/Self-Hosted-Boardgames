@@ -22,11 +22,13 @@ function watchersOf(room) {
 
 // Väljer ett uppdrag av rätt sort som inte redan är använt. Tar slut på sorten
 // tas ett annat oanvänt uppdrag, och i sista hand ett som redan spelats.
-export function pickTask(kind, allowMaterial, used, rng = Math.random) {
+// settings avgör urvalet: uppdrag med material och långa uppdrag är med först när värden har slagit på dem.
+export function pickTask(kind, settings, used, rng = Math.random) {
+  const allowed = (t) => (settings?.material || !t.material) && (settings?.long || !t.long);
   const free = TASKS.filter((t) => !used.includes(t.id));
   const pools = [
-    free.filter((t) => t.kind === kind && (allowMaterial || !t.material)),
-    free.filter((t) => allowMaterial || !t.material),
+    free.filter((t) => t.kind === kind && allowed(t)),
+    free.filter(allowed),
     free,
     TASKS,
   ];
@@ -101,7 +103,7 @@ export function start(room, now = Date.now(), rng = Math.random) {
   }
   const kinds = assignKinds(schedule).map((k) => mixed[KINDS.indexOf(k)]);
   const tasks = [];
-  for (const kind of kinds) tasks.push(pickTask(kind, Boolean(room.settings?.material), tasks, rng));
+  for (const kind of kinds) tasks.push(pickTask(kind, room.settings, tasks, rng));
   // Jämnt antal lag: i sista varvet tävlar alla lag en gång, och det ger dubbla poäng.
   const lastLap = ids.length % 2 === 0 ? schedule.length - ids.length / 2 : null;
   room.syna = {
@@ -359,7 +361,7 @@ function handle(room, ctx, msg, now, rng) {
     case 'swapTask': {
       if (!ctx.isAdmin) return 'bara värden får byta uppdrag';
       if (s.step !== 'intro') return 'uppdraget kan bara bytas innan budgivningen';
-      s.tasks[s.round] = pickTask(s.kinds[s.round], Boolean(room.settings?.material), [...s.tasks], rng);
+      s.tasks[s.round] = pickTask(s.kinds[s.round], room.settings, [...s.tasks], rng);
       beginRound(room, rng);
       return null;
     }

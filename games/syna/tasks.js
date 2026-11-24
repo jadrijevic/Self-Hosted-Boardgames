@@ -8,7 +8,8 @@
 // bid       gränser för budet, i uppdragets enhet
 // text      läses upp av husets röst
 // role      vad lagets yngsta gör. Den yngsta ser, väljer eller bestämmer,
-//           men är aldrig ensam utförare under tidspress.
+//           men är aldrig ensam utförare under tidspress: ingen roll gör att laget faller om barnet tvekar.
+// long      en rond som tar över fem minuter. Sådana uppdrag är avslagna tills värden slår på dem.
 // topics    ett av dem lottas per rond och visas för alla, med rubriken topicLabel (annars Ämne)
 // prompts   lagen får var sitt, och bara kontrollanten ser dem
 // needs     materialet, för uppdrag med material: true
@@ -29,8 +30,8 @@ export const TASKS = [
   {
     id: 'viskningen', name: 'Viskningen', kind: 'röst', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 60, unit: 'ord', bid: { min: 1, max: 10, step: 1, start: 6 },
-    text: 'Kontrollanten viskar en mening på tio ord till lagets yngsta. Meningen viskas vidare genom hela laget. Den sista säger den högt. Hur många ord blir rätt?',
-    role: 'Lagets yngsta får meningen först.',
+    text: 'Kontrollanten viskar en mening på tio ord till den första i laget. Meningen viskas vidare genom hela laget. Den sista säger den högt. Hur många ord blir rätt?',
+    role: 'Lagets yngsta bestämmer i vilken ordning laget står.',
     prompts: [
       'Farfars gröna cykel rullade själv nerför backen till förvånade grannen',
       'Tre trötta älgar åt upp alla äpplen i mormors trädgård',
@@ -60,13 +61,13 @@ export const TASKS = [
     id: 'slakten', name: 'Släkten', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 45, unit: 'namn', bid: { min: 2, max: 25, step: 1, start: 8 },
     text: 'Säg namn på släktingar som inte är i rummet. Den äldsta i rummet godkänner. Hur många hinner ni på 45 sekunder?',
-    role: 'Lagets yngsta säger första namnet.',
+    role: 'Lagets yngsta väljer vem som börjar.',
   },
   {
     id: 'kedjan', name: 'Kedjan', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 45, unit: 'ord', bid: { min: 3, max: 30, step: 1, start: 10 },
     text: 'Säg saker som hör till rondens ämne, en person i taget, utan att upprepa. Hur många hinner ni på 45 sekunder?',
-    role: 'Lagets yngsta säger första ordet.',
+    role: 'Lagets yngsta är joker och får säga ord när som helst.',
     topics: ['Saker i ett kök', 'Djur', 'Länder', 'Saker som är röda', 'Mat på ett kalas', 'Saker i en verktygslåda', 'Idrotter', 'Saker man tar med till stranden'],
   },
   {
@@ -80,12 +81,12 @@ export const TASKS = [
     id: 'rimmet', name: 'Rimmet', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 45, unit: 'rim', bid: { min: 1, max: 15, step: 1, start: 5 },
     text: 'Säg ord som rimmar på rondens ord, en person i taget, utan att upprepa. Hur många rim hinner ni på 45 sekunder?',
-    role: 'Lagets yngsta säger första rimmet.',
+    role: 'Lagets yngsta är joker och får rimma när som helst.',
     topicLabel: 'Rimord',
     topics: ['Hatt', 'Mus', 'Sko', 'Bil', 'Sol', 'Kväll', 'Gran', 'Hand'],
   },
   {
-    id: 'vaskan', name: 'Väskan', kind: 'huvud', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    id: 'vaskan', name: 'Väskan', kind: 'huvud', material: false, long: true, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 90, unit: 'saker', bid: { min: 2, max: 12, step: 1, start: 5 },
     text: 'Packa en väska i huvudet. Varje person räknar upp allt som ligger i väskan och lägger till en sak. Kontrollanten avbryter när någon glömmer. Hur många saker får ni med på 90 sekunder?',
     role: 'Lagets yngsta lägger första saken i väskan.',
@@ -100,7 +101,7 @@ export const TASKS = [
     id: 'tystnaden', name: 'Tystnaden', kind: 'kropp', material: false, mode: 'together', measure: 'time', direction: 'low',
     seconds: 90, unit: 'sekunder', bid: { min: 10, max: 90, step: 5, start: 45 },
     text: 'Ställ er i rondens ordning utan att prata. Kontrollanten stoppar tiden när ni står rätt. Hur snabbt klarar ni det?',
-    role: 'Lagets yngsta är den enda som får prata.',
+    role: 'Lagets yngsta får flytta på de andra. Ingen pratar.',
     topicLabel: 'Ordning',
     topics: ['Födelsedag, januari först', 'Skostorlek, minst först', 'Förnamn i bokstavsordning', 'Handens storlek, minst först'],
   },
@@ -117,10 +118,10 @@ export const TASKS = [
     role: 'Lagets yngsta väljer bokstav och bestämmer vem som gör vad.',
   },
   {
-    id: 'ryggen', name: 'Ryggen', kind: 'kropp', material: false, mode: 'turns', measure: 'count', direction: 'high',
+    id: 'ryggen', name: 'Ryggen', kind: 'kropp', material: false, long: true, mode: 'turns', measure: 'count', direction: 'high',
     seconds: 90, unit: 'figurer', bid: { min: 1, max: 6, step: 1, start: 2 },
-    text: 'Kontrollanten viskar en figur till lagets yngsta. Figuren ritas vidare med fingret på ryggen genom hela laget, och den sista säger vad det är. Hur många figurer kommer rätt fram på 90 sekunder?',
-    role: 'Lagets yngsta får figuren först.',
+    text: 'Kontrollanten viskar en figur till den första i laget. Figuren ritas vidare med fingret på ryggen genom hela laget, och den sista säger vad det är. Hur många figurer kommer rätt fram på 90 sekunder?',
+    role: 'Lagets yngsta bestämmer ordningen i ledet.',
     prompts: [
       'Hjärta · Sol · Hus · Fisk · Stjärna · Båt',
       'Blomma · Måne · Träd · Kopp · Nyckel · Bil',
@@ -144,7 +145,7 @@ export const TASKS = [
     id: 'blindparet', name: 'Blindparet', kind: 'kropp', material: true, mode: 'together', measure: 'count', direction: 'high',
     seconds: 60, unit: 'par', bid: { min: 1, max: 15, step: 1, start: 5 },
     text: 'Para ihop sockor med förbundna ögon. Hur många par hinner ni på en minut?',
-    role: 'Bara lagets yngsta ser, och säger vad de andra ska göra.', needs: 'Sockor och ögonbindlar',
+    role: 'Lagets yngsta och en vuxen ser, och säger vad de andra ska göra.', needs: 'Sockor och ögonbindlar',
   },
 ];
 

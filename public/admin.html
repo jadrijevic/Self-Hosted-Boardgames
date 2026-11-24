@@ -67,6 +67,8 @@ function render() {
       <button class="btn big2" data-do="start">Starta spelet</button>
       <button class="btn ghost" data-do="setMaterial" data-on="${state.settings.material ? 0 : 1}">Uppdrag med material: ${state.settings.material ? 'på' : 'av'}</button>
       <p class="muted">Utan material väljs bara uppdrag som inte kräver några saker.</p>
+      <button class="btn ghost" data-do="setLong" data-on="${state.settings.long ? 0 : 1}">Långa uppdrag: ${state.settings.long ? 'på' : 'av'}</button>
+      <p class="muted">Väskan och Ryggen tar över fem minuter per rond och är avslagna från början.</p>
     </section>
     <section class="card">
       <h2>Antal lag</h2>
@@ -75,7 +77,7 @@ function render() {
         <span>${state.teams.length}</span>
         <button class="btn" data-do="teams" data-n="${state.teams.length + 1}">+</button>
       </div>
-      <p class="muted">Två till sex lag. Tre eller fyra är grundläget.</p>
+      <p class="muted">Två till sex lag. Fyra passar bäst. Med fem eller sex avgör synen mer än uppdragen, och med tre är vinnaren ofta klar i förväg.</p>
     </section>
     ${state.teams.map((t) => `
       <section class="card" style="--c:${esc(t.color)}">

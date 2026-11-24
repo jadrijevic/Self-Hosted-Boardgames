@@ -20,6 +20,39 @@ test('varje sort har minst fem uppdrag utan material', () => {
   assert.equal(new Set(TASKS.map((t) => t.name)).size, TASKS.length, 'varje uppdrag har ett eget namn');
 });
 
+test('långa uppdrag och uppdrag med material är avslagna tills värden slår på dem', () => {
+  const long = TASKS.filter((t) => t.long).map((t) => t.id);
+  assert.deepEqual(long.sort(), ['ryggen', 'vaskan']);
+  const pool = (settings) => {
+    const seen = new Set();
+    for (let seed = 1; seed <= 150; seed++) {
+      const g = setup(4, seed);
+      Object.assign(g.room.settings, settings);
+      g.admin({ t: 'start' });
+      for (const id of g.room.syna.tasks) seen.add(id);
+      // Byt uppdrag håller sig också till urvalet.
+      g.admin({ t: 'swapTask' });
+      seen.add(g.room.syna.tasks[0]);
+    }
+    return TASKS.filter((t) => seen.has(t.id));
+  };
+  const base = pool({});
+  assert.equal(base.length, 13, base.map((t) => t.name).join(', '));
+  assert.ok(base.every((t) => !t.long && !t.material));
+  assert.equal(pool({ long: true }).length, 15);
+  assert.equal(pool({ long: true, material: true }).length, 18);
+  // Också utan de långa finns minst fyra av varje sort, så att två går att spela och två att byta till.
+  for (const kind of KINDS) assert.ok(base.filter((t) => t.kind === kind).length >= 4, kind);
+
+  const g = setup(4, 1);
+  assert.equal(g.room.settings.long, false);
+  assert.equal(g.as('rod', { t: 'setLong', on: true }), 'bara värden får göra det');
+  assert.equal(g.admin({ t: 'setLong', on: true }), null);
+  assert.equal(g.room.settings.long, true);
+  g.admin({ t: 'start' });
+  assert.equal(g.admin({ t: 'setLong', on: false }), 'inställningen kan bara ändras i lobbyn');
+});
+
 test('varje uppdrag hänger ihop: sort, bud, tid, text och det som lottas', () => {
   for (const t of TASKS) {
     const where = t.name;
@@ -40,7 +73,11 @@ test('varje uppdrag hänger ihop: sort, bud, tid, text och det som lottas', () =
 
     assert.ok(t.text.endsWith('?'), `${where}: texten slutar med frågan som budet svarar på`);
     assert.ok(t.text.length <= 200, `${where}: texten är ${t.text.length} tecken`);
-    assert.match(t.role, /^(Bara l|L)agets yngsta /, where);
+    assert.match(t.role, /^Lagets yngsta /, where);
+    // Den yngsta ser, väljer eller bestämmer, men står aldrig ensam under tidspress: inte först i ett led,
+    // inte den som ska säga det första svaret och inte den enda som får göra något.
+    assert.doesNotMatch(t.role, /säger första|får \S+ först|enda som|Bara lagets yngsta/, `${where}: ${t.role}`);
+    assert.doesNotMatch(t.text, /lagets yngsta/, `${where}: uppdraget ska inte hänga på den yngsta`);
     // Nämner texten en tid ska det vara uppdragets tid.
     const said = /(\d+) sekunder/.exec(t.text)?.[1] ?? (/en minut/.test(t.text) ? '60' : null);
     if (said) assert.equal(Number(said), t.seconds, `${where}: tiden i texten`);

@@ -214,7 +214,7 @@ export function runEvening(seed, report) {
     else if (kind === 'undo') { if (admin({ t: 'undo' }) === null) report.undone += 1; }
     else if (kind === 'kick') admin({ t: 'kick', device: dev(d)?.id });
     else if (kind === 'rename') admin({ t: 'renameTeam', team: pick(teams), name: pick(['Mormors gäng', 'X', '  ', 'A'.repeat(40), '<b>Fet</b>']) });
-    else if (kind === 'lobbyOnly') admin(pick([{ t: 'setTeamCount', count: pick([2, 3, 6]) }, { t: 'setMaterial', on: chance(0.5) }, { t: 'start' }]));
+    else if (kind === 'lobbyOnly') admin(pick([{ t: 'setTeamCount', count: pick([2, 3, 6]) }, { t: 'setMaterial', on: chance(0.5) }, { t: 'setLong', on: chance(0.5) }, { t: 'start' }]));
     else if (kind === 'restart') restart();
     else if (kind === 'clock') { now += pick([0, 1000, 44_000, 200_000]); try { tick(room, now); } catch (e) { fail('klockan kastade', e.message); } check(); }
     else if (kind === 'newPhone') join('team', pick(teams));
