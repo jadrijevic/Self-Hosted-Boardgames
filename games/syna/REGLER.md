@@ -63,6 +63,9 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 - Under ett försök betyder det att försöket börjar om. Det får också kontrollanten göra, om tiden startades av misstag.
 - Direkt efter ett försök betyder det att försöket görs om. När lagen turas om gäller det bara laget som just tävlade.
 - Ett bytt uppdrag går att ångra. Ett avslutat spel går inte att ångra.
+- Medan buden är hemliga kan de två lagens mobiler inte byta lag eller roll, och detsamma gäller lagen som synar tills alla har synat. En mobil utan plats får alltid gå med.
+- Under spelet kan ingen ny bli kontrollant så länge det finns en. Värden kan ta bort den som sitter.
+- En tid kan inte bli längre än uppdragets tid. Stoppas klockan efter att tiden gått ut räknas det som att tiden gick ut.
 
 ## Uppdrag
 
