@@ -73,6 +73,7 @@ function variantPoints(rule, { direction, bids, made, calls, factor }) {
 
 function evening(teams, profile, rnd) {
   const room = newRoom(teams);
+  room.settings.practice = false; // övningsronden ger inga poäng och hör inte hit
   const admin = (msg) => apply(room, null, msg, true, 0, rnd);
   admin({ t: 'start' });
   const s = room.syna;
@@ -171,7 +172,7 @@ console.log('1. Kvällen i stort, när alla lag budar lagom och synar när det l
 console.log('   lag  ronder  minuter (snitt, 90 % under)  oavgjort i topp  något lag på minus  avgjort före sista ronden  bästa laget vinner  poäng från syn  skillnad etta–sist');
 for (const teams of [2, 3, 4, 5, 6]) {
   const r = study(teams, same(teams), 'lika');
-  const rounds = (() => { const room = newRoom(teams); apply(room, null, { t: 'start' }, true, 0, rng32(1)); return room.syna.schedule.length; })();
+  const rounds = (() => { const room = newRoom(teams); room.settings.practice = false; apply(room, null, { t: 'start' }, true, 0, rng32(1)); return room.syna.schedule.length; })();
   const m = [...r.minutes].sort((x, y) => x - y);
   console.log(`   ${teams}    ${rounds}       ${(m.reduce((x, y) => x + y, 0) / N).toFixed(1)}, ${m[Math.floor(N * 0.9)].toFixed(1)}`.padEnd(46)
     + `${pct(r.ties / N)}`.padEnd(17) + `${pct(r.negative / N)}`.padEnd(20) + `${pct(r.early / N)}`.padEnd(26) + `${pct(r.bestWins / N)} (slump ${pct(1 / teams)})`.padEnd(20) + `${pct(r.callShare / N)}`.padEnd(16) + `${(r.margin / N).toFixed(1)}`);

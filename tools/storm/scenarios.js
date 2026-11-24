@@ -17,6 +17,10 @@ import { newRoom, addDevice, apply, viewFor, normalize, tick } from '../../serve
 import { taskById } from '../../games/syna/tasks.js';
 import { stage as stageHtml, player as playerHtml, admin as adminHtml } from '../../public/syna.js';
 
+// Rondens uppdrag och lag. Övningsronden ligger utanför schemat.
+const duelOf = (s) => (s.practice ? s.practice.duel : s.schedule[s.round]);
+const taskOf = (s) => taskById(s.practice ? s.practice.task : s.tasks[s.round]);
+
 const STEPS = ['intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end'];
 
 export function rng32(seed) {
@@ -38,7 +42,7 @@ export function hostFinishes(room, now, rnd, limit = 200) {
     if (s.step === 'end') return i;
     const admin = (msg) => apply(room, null, msg, true, now + i, rnd);
     if (s.step === 'bid') {
-      const open = s.schedule[s.round].find((t) => !s.bids[t].locked);
+      const open = duelOf(s).find((t) => !s.bids[t].locked);
       admin(open ? { t: 'lockBid', team: open } : { t: 'next' });
     } else if (s.step === 'final') admin({ t: 'finalResult', success: true });
     else admin({ t: 'next' });
@@ -98,6 +102,8 @@ export function runEvening(seed, report) {
   const phoneOf = (team) => devices.find((d) => dev(d)?.role === 'team' && dev(d).team === team && !d.absent);
   const judge = () => devices.find((d) => dev(d)?.role === 'judge');
 
+  // Var tredje kväll spelas utan övningsrond, så att båda vägarna provas.
+  if (chance(1 / 3)) room.settings.practice = false;
   admin({ t: 'start' });
   let game = room.syna;
   let ledger = {};
@@ -110,13 +116,13 @@ export function runEvening(seed, report) {
     if (room.phase !== 'game' || !s) { game = null; ledger = {}; return; }
     if (s !== game) { game = s; ledger = {}; }
     report.steps[s.step] = (report.steps[s.step] ?? 0) + 1;
-    const task = taskById(s.tasks[s.round]);
-    const duel = s.schedule[s.round] ?? [];
+    const task = taskOf(s);
+    const duel = duelOf(s) ?? [];
     const ids = room.teams.map((t) => t.id);
 
     // Läget hänger ihop.
     if (!STEPS.includes(s.step)) fail('okänt steg', s.step);
-    if (!task) return fail('okänt uppdrag', String(s.tasks[s.round]));
+    if (!task) return fail('okänt uppdrag', String(s.practice?.task ?? s.tasks[s.round]));
     if (duel.length !== 2 || !duel.every((t) => ids.includes(t))) fail('duellen har lag som inte finns', duel.join(','));
     if ((s.step === 'play') !== (s.endsAt != null)) fail('klockan går utanför ett försök, eller står still under ett', `${s.step}, endsAt ${s.endsAt}`);
     if (![0, 1].includes(s.turn) || [...s.order].sort().join() !== [...duel].sort().join()) fail('turordningen stämmer inte med duellen', `${s.order} / ${duel}`);
@@ -138,15 +144,17 @@ export function runEvening(seed, report) {
     }
 
     // Poängen är summan av rondernas poäng.
-    if (['score', 'final', 'end'].includes(s.step) && s.points) ledger[s.round] = { ...s.points };
+    // Övningsronden visar poäng men ger inga: den ska aldrig synas i ställningen.
+    if (s.practice) report.practice = (report.practice ?? 0) + 1;
+    else if (['score', 'final', 'end'].includes(s.step) && s.points) ledger[s.round] = { ...s.points };
     const expected = Object.fromEntries(ids.map((id) => [id, 0]));
     for (const [r, pts] of Object.entries(ledger)) {
-      if (Number(r) < s.round || ['score', 'final', 'end'].includes(s.step)) for (const [id, p] of Object.entries(pts)) expected[id] = (expected[id] ?? 0) + p;
+      if (Number(r) < s.round || (!s.practice && ['score', 'final', 'end'].includes(s.step))) for (const [id, p] of Object.entries(pts)) expected[id] = (expected[id] ?? 0) + p;
     }
     if (!msg?.skipLedger && ids.some((id) => (s.scores[id] ?? 0) !== expected[id])) fail('ställningen är inte summan av rondernas poäng', `${JSON.stringify(s.scores)} mot ${JSON.stringify(expected)}`);
 
     // Hemligheter: ingen mobil får se båda lagens bud under samma budgivning, kontrollantens lappar eller historiken.
-    const key = `${s.round}|${s.tasks[s.round]}`;
+    const key = `${s.practice ? 'övning' : s.round}|${task.id}`;
     if (s.step !== 'bid' || key !== bidKey) { sawBid.clear(); bidKey = s.step === 'bid' ? key : ''; }
     const secrets = s.notes ? Object.values(s.notes) : [];
     for (const d of devices) {
@@ -200,32 +208,33 @@ export function runEvening(seed, report) {
     const s = room.syna;
     const d = pick(devices);
     const teams = room.teams.map((t) => t.id);
-    const kind = pick(['leave', 'switch', 'judge', 'rogue', 'spam', 'mistap', 'undo', 'kick', 'rename', 'lobbyOnly', 'restart', 'clock', 'newPhone', 'swap']);
+    const kind = pick(['leave', 'switch', 'judge', 'rogue', 'spam', 'mistap', 'undo', 'kick', 'rename', 'lobbyOnly', 'restart', 'clock', 'newPhone', 'swap', 'skip']);
     report.trouble[kind] = (report.trouble[kind] ?? 0) + 1;
     if (kind === 'leave') { send(d.token, { t: 'leave' }); if (chance(0.7)) send(d.token, { t: 'choose', role: d.home ? 'team' : 'audience', team: d.home }); }
     else if (kind === 'switch') send(d.token, { t: 'choose', role: 'team', team: pick(teams) });
     else if (kind === 'judge') send(d.token, { t: 'choose', role: 'judge' });
     else if (kind === 'rogue') {
       const who = judge() ?? d;
-      const team = pick(s?.schedule?.[s.round] ?? teams);
+      const team = pick((s ? duelOf(s) : null) ?? teams);
       send(who.token, pick([{ t: 'next' }, { t: 'count', team, delta: pick([1, -1]) }, { t: 'stop', team }, { t: 'setResult', team, value: pick([0, 0.1, 59, 9999, 1e9, null]) }, { t: 'undo', step: s?.step }]));
     } else if (kind === 'spam') send(d.token, pick([{ t: 'next' }, { t: 'lockBid' }, { t: 'bid', value: pick([-5, 0, 3.7, 1e6]) }, { t: 'call', target: pick([...teams, 'pass']) }, { t: 'start' }, { t: 'endGame' }, { t: 'swapTask' }, { t: 'finalResult', success: true }, { t: 'undo' }]));
     else if (kind === 'mistap') { admin({ t: 'next' }); if (chance(0.5)) admin({ t: 'next' }); }
     else if (kind === 'undo') { if (admin({ t: 'undo' }) === null) report.undone += 1; }
     else if (kind === 'kick') admin({ t: 'kick', device: dev(d)?.id });
     else if (kind === 'rename') admin({ t: 'renameTeam', team: pick(teams), name: pick(['Mormors gäng', 'X', '  ', 'A'.repeat(40), '<b>Fet</b>']) });
-    else if (kind === 'lobbyOnly') admin(pick([{ t: 'setTeamCount', count: pick([2, 3, 6]) }, { t: 'setMaterial', on: chance(0.5) }, { t: 'setLong', on: chance(0.5) }, { t: 'start' }]));
+    else if (kind === 'lobbyOnly') admin(pick([{ t: 'setTeamCount', count: pick([2, 3, 6]) }, { t: 'setMaterial', on: chance(0.5) }, { t: 'setLong', on: chance(0.5) }, { t: 'setPractice', on: chance(0.5) }, { t: 'start' }]));
     else if (kind === 'restart') restart();
     else if (kind === 'clock') { now += pick([0, 1000, 44_000, 200_000]); try { tick(room, now); } catch (e) { fail('klockan kastade', e.message); } check(); }
     else if (kind === 'newPhone') join('team', pick(teams));
     else if (kind === 'swap') admin({ t: 'swapTask' });
+    else if (kind === 'skip') { if (chance(0.3)) admin({ t: 'skipPractice' }); else send(d.token, { t: 'skipPractice' }); }
   }
 
   // Det som för kvällen framåt, gjort av dem som ska göra det. Den som inte svarar ersätts av värden efter en stund.
   function progress() {
     const s = room.syna;
-    const task = taskById(s.tasks[s.round]);
-    const duel = s.schedule[s.round];
+    const task = taskOf(s);
+    const duel = duelOf(s);
     const j = judge();
     waited += 1;
     const late = waited > 6;
@@ -259,12 +268,12 @@ export function runEvening(seed, report) {
     // Fuskaren byter till motståndarlaget mitt i budgivningen för att se deras bud.
     const s = room.syna;
     if (cheater && s.step === 'bid' && dev(cheater)?.role === 'team' && chance(0.4)) {
-      const other = s.schedule[s.round].find((t) => t !== dev(cheater).team);
-      if (s.schedule[s.round].includes(dev(cheater).team)) { send(cheater.token, { t: 'leave' }); send(cheater.token, { t: 'choose', role: 'team', team: other }); report.peeks += 1; }
+      const other = duelOf(s).find((t) => t !== dev(cheater).team);
+      if (duelOf(s).includes(dev(cheater).team)) { send(cheater.token, { t: 'leave' }); send(cheater.token, { t: 'choose', role: 'team', team: other }); report.peeks += 1; }
     } else if (chance(chaos)) trouble();
     else progress();
     if (room.phase !== 'game') break;
-    const at = `${room.syna.round}|${room.syna.step}|${room.syna.turn}`;
+    const at = `${room.syna.practice ? 'övning' : room.syna.round}|${room.syna.step}|${room.syna.turn}`;
     if (at !== last) { last = at; waited = 0; }
     // Då och då: kan värden ensam ta kvällen i mål härifrån?
     if (i % 40 === 17) {

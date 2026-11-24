@@ -20,6 +20,13 @@ Syna är lagutmaningar live i vardagsrummet med hemliga bud och synande. Det hä
 
 Vissa uppdrag görs av båda lagen samtidigt. I andra turas lagen om: då går det djärvaste budet sist, och lag två får inte upprepa något som lag ett har sagt.
 
+## Övningsronden
+
+- Kvällen börjar med en övningsrond: Masken, med två lag som duellerar och de andra som synar. Den går som en vanlig rond.
+- Den ger inga poäng och inga rekord. Poängen visas som de hade blivit, så att alla ser hur bud, djärvast bud och syn räknas.
+- I övningen duellerar två lag som inte möts i rond 1. Efter rond 1 har då alla lag både budat och synat.
+- Värden kan hoppa över övningen när som helst, eller slå av den i lobbyn. Masken spelas inte igen senare samma kväll.
+
 ## Poäng
 
 - Klarat bud ger 1 poäng. Det djärvaste klarade budet i duellen ger 2 till. Missat bud ger 0.

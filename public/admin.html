@@ -67,6 +67,8 @@ function render() {
       <button class="btn big2" data-do="start">Starta spelet</button>
       <button class="btn ghost" data-do="setMaterial" data-on="${state.settings.material ? 0 : 1}">Uppdrag med material: ${state.settings.material ? 'på' : 'av'}</button>
       <p class="muted">Utan material väljs bara uppdrag som inte kräver några saker.</p>
+      <button class="btn ghost" data-do="setPractice" data-on="${state.settings.practice === false ? 1 : 0}">Övningsrond: ${state.settings.practice === false ? 'av' : 'på'}</button>
+      <p class="muted">En första rond med Masken som inte räknas. Den lär ut bud och syn.</p>
       <button class="btn ghost" data-do="setLong" data-on="${state.settings.long ? 0 : 1}">Långa uppdrag: ${state.settings.long ? 'på' : 'av'}</button>
       <p class="muted">Väskan och Ryggen tar över fem minuter per rond och är avslagna från början.</p>
     </section>

@@ -10,8 +10,11 @@ import { newSchedule, assignKinds, KINDS } from './schedule.js';
 import { TASKS, FINALS, taskById, finalById } from './tasks.js';
 
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
-const duelOf = (s) => s.schedule[s.round];
-const taskOf = (s) => taskById(s.tasks[s.round]);
+// Övningsronden spelas före rond 1 och ligger utanför schemat: s.practice = { task, duel } medan den pågår.
+// Den går som en vanlig rond, men ger inga poäng och inga rekord.
+export const PRACTICE_TASK = 'masken';
+const duelOf = (s) => (s.practice ? s.practice.duel : s.schedule[s.round]);
+const taskOf = (s) => taskById(s.practice ? s.practice.task : s.tasks[s.round]);
 const boldness = (task, bid) => (task.direction === 'low' ? -bid : bid);
 const performing = (s, task) => (task.mode === 'turns' ? [s.order[s.turn]] : duelOf(s));
 
@@ -102,8 +105,13 @@ export function start(room, now = Date.now(), rng = Math.random) {
     [mixed[i], mixed[j]] = [mixed[j], mixed[i]];
   }
   const kinds = assignKinds(schedule).map((k) => mixed[KINDS.indexOf(k)]);
+  // Med övningsrond är övningens uppdrag förbrukat, så att det inte kommer igen senare under kvällen.
+  const practice = room.settings?.practice !== false;
   const tasks = [];
-  for (const kind of kinds) tasks.push(pickTask(kind, room.settings, tasks, rng));
+  for (const kind of kinds) tasks.push(pickTask(kind, room.settings, practice ? [...tasks, PRACTICE_TASK] : tasks, rng));
+  // I övningen duellerar helst två lag som inte möts i rond 1. Då har alla lag både budat och synat efter rond 1.
+  const first = schedule[0];
+  const practiceDuel = schedule.find((pair) => !pair.some((t) => first.includes(t))) ?? first;
   // Jämnt antal lag: i sista varvet tävlar alla lag en gång, och det ger dubbla poäng.
   const lastLap = ids.length % 2 === 0 ? schedule.length - ids.length / 2 : null;
   room.syna = {
@@ -117,6 +125,7 @@ export function start(room, now = Date.now(), rng = Math.random) {
     recordsSet: Object.fromEntries(ids.map((id) => [id, 0])),
     final: { task: FINALS[0].id, tries: 0, success: null },
   };
+  if (practice) room.syna.practice = { task: PRACTICE_TASK, duel: [...practiceDuel] };
   room.phase = 'game';
   beginRound(room, rng);
   return null;
@@ -175,6 +184,9 @@ function finishRound(room, now) {
   });
   s.made = made;
   s.points = points;
+  s.newRecord = null;
+  // Övningsronden visar vad poängen hade blivit, men rör varken ställningen eller rekordboken.
+  if (s.practice) { s.step = 'score'; return; }
   for (const [t, p] of Object.entries(points)) s.scores[t] = (s.scores[t] ?? 0) + p;
 
   // Rekordboken gäller resultatet, inte budet. Bara rondens bästa lag kan ta rekordet.
@@ -212,7 +224,11 @@ function advance(room, ctx, isJudge, now, rng) {
     case 'play': endPlay(room); return null;
     case 'result': finishRound(room, now); return null;
     case 'score':
-      if (s.round + 1 < s.schedule.length) {
+      if (s.practice) {
+        // Övningen är över: nu börjar rond 1.
+        s.practice = null;
+        beginRound(room, rng);
+      } else if (s.round + 1 < s.schedule.length) {
         s.round += 1;
         beginRound(room, rng);
       } else {
@@ -228,7 +244,7 @@ function advance(room, ctx, isJudge, now, rng) {
 // inget, så det senast sparade läget är då alltid stunden före försöket: att ångra där är att
 // göra om försöket. Historiken innehåller hemliga bud och lämnar aldrig servern (se view).
 const HISTORY = 6;
-const stepKey = (s) => [s.round, s.step, s.turn, s.tasks[s.round], s.topic].join('|');
+const stepKey = (s) => [s.round, s.step, s.turn, s.tasks[s.round], s.topic, s.practice ? 'övning' : ''].join('|');
 
 function snapshot(room) {
   const { history, ...syna } = room.syna;
@@ -358,10 +374,18 @@ function handle(room, ctx, msg, now, rng) {
     }
     case 'next':
       return advance(room, ctx, isJudge, now, rng);
+    case 'skipPractice': {
+      if (!ctx.isAdmin) return 'bara värden får hoppa över övningen';
+      if (!s.practice) return 'det finns ingen övningsrond att hoppa över';
+      s.practice = null;
+      beginRound(room, rng);
+      return null;
+    }
     case 'swapTask': {
       if (!ctx.isAdmin) return 'bara värden får byta uppdrag';
+      if (s.practice) return 'övningsronden har ett fast uppdrag. Hoppa över den i stället';
       if (s.step !== 'intro') return 'uppdraget kan bara bytas innan budgivningen';
-      s.tasks[s.round] = pickTask(s.kinds[s.round], room.settings, [...s.tasks], rng);
+      s.tasks[s.round] = pickTask(s.kinds[s.round], room.settings, [...s.tasks, ...(room.settings?.practice !== false ? [PRACTICE_TASK] : [])], rng);
       beginRound(room, rng);
       return null;
     }
@@ -433,6 +457,7 @@ export function view(room, ctx) {
   const out = {
     round: s.round,
     rounds: s.schedule.length,
+    practice: Boolean(s.practice),
     step: s.step,
     duel,
     watchers,
@@ -450,7 +475,7 @@ export function view(room, ctx) {
     made: s.made,
     points: s.points,
     newRecord: s.newRecord,
-    record: room.records[task.id] ?? null,
+    record: s.practice ? null : room.records[task.id] ?? null,
     scores: hidden && !ctx.isAdmin ? null : s.scores,
     final: { ...finalById(s.final.task), tries: s.final.tries, success: s.final.success },
   };

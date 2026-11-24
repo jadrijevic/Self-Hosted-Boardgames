@@ -23,7 +23,7 @@ export function newRoom(teamCount = 4) {
     phase: 'lobby',
     teams: TEAM_PRESETS.slice(0, n).map((t) => ({ ...t })),
     devices: {}, // hemlig token -> { id, role, team, name }
-    settings: { material: false, long: false },
+    settings: { material: false, long: false, practice: true },
     records: {}, // rekordboken: uppdrag -> { value, team, date }. Följer med mellan kvällarna.
   };
 }
@@ -32,6 +32,7 @@ export function newRoom(teamCount = 4) {
 export function normalize(room) {
   room.settings ??= { material: false };
   room.settings.long ??= false;
+  room.settings.practice ??= true;
   room.records ??= {};
   if (room.phase !== 'game' || !room[room.game]) room.phase = 'lobby';
   return room;
@@ -114,10 +115,11 @@ export function apply(room, token, msg, isAdmin = false, now = Date.now(), rng =
       return null;
     }
     case 'setMaterial':
-    case 'setLong': {
+    case 'setLong':
+    case 'setPractice': {
       if (!isAdmin) return 'bara värden får göra det';
       if (room.phase !== 'lobby') return 'inställningen kan bara ändras i lobbyn';
-      room.settings[msg.t === 'setLong' ? 'long' : 'material'] = Boolean(msg.on);
+      room.settings[{ setMaterial: 'material', setLong: 'long', setPractice: 'practice' }[msg.t]] = Boolean(msg.on);
       return null;
     }
     case 'start': {
