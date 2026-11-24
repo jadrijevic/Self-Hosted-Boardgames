@@ -35,7 +35,7 @@ export function pickTask(kind, allowMaterial, used, rng = Math.random) {
 
 // Poängen för en rond.
 //   Klarat bud: 1. Djärvaste klarade budet: 2 till (delas vid lika bud).
-//   Rätt syn: 2. Fel syn: -1, som går till det synade laget.
+//   Rätt syn: 2. Fel syn: det synade laget får 1. Den som synade förlorar inget: ingen ställning sjunker någonsin.
 export function scoreRound({ direction, bids, results, calls = {}, factor = 1 }) {
   const teams = Object.keys(bids);
   const made = {};
@@ -55,7 +55,6 @@ export function scoreRound({ direction, bids, results, calls = {}, factor = 1 })
   for (const [caller, target] of Object.entries(calls)) {
     if (!(target in made)) continue; // stod över
     if (made[target]) {
-      points[caller] -= 1;
       points[target] += 1;
     } else {
       points[caller] += 2;

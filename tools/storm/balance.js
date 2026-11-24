@@ -37,7 +37,7 @@ const CALLS = {
     const [x, y] = duel.map((t) => chanceToMake(task, bids[t]));
     return x === y ? duel[rnd() < 0.5 ? 0 : 1] : duel[x < y ? 0 : 1];
   },
-  // Synar bara om budet ser ut att klaras mindre än två gånger av tre. Där går gränsen för att det lönar sig.
+  // Synar bara om budet ser ut att klaras mindre än två gånger av tre. Där gick gränsen för att det lönade sig när fel syn kostade 1.
   kalkyl: (task, bids, duel, rnd) => { const t = CALLS.alltid(task, bids, duel, rnd); return chanceToMake(task, bids[t]) < 2 / 3 ? t : 'pass'; },
 };
 
@@ -48,10 +48,10 @@ const roundSeconds = (task, watchers) => (task.text.length + task.role.length) /
 const FINAL_SECONDS = 150;
 
 // Regelvarianter som räknas vid sidan av de riktiga poängen, på samma bud, syner och resultat.
-//   nu        reglerna som de är: fel syn kostar 1
-//   golv      som nu, men ett lags ställning kan aldrig gå under noll
-//   utan      fel syn kostar ingenting för den som synade. Det synade laget får fortfarande 1
-const VARIANTS = { nu: { wrong: -1, floor: false }, golv: { wrong: -1, floor: true }, utan: { wrong: 0, floor: false } };
+//   nu        reglerna som de är: fel syn kostar ingenting för den som synade. Det synade laget får 1
+//   avdrag    regeln som gällde först: fel syn kostar den som synade 1
+//   golv      som avdrag, men ett lags ställning kan aldrig gå under noll
+const VARIANTS = { nu: { wrong: 0, floor: false }, avdrag: { wrong: -1, floor: false }, golv: { wrong: -1, floor: true } };
 function variantPoints(rule, { direction, bids, made, calls, factor }) {
   const duel = Object.keys(bids);
   const points = Object.fromEntries([...duel, ...Object.keys(calls)].map((t) => [t, 0]));
@@ -199,7 +199,7 @@ for (const teams of [3, 4, 5, 6]) {
   console.log(`   ${teams} lag: ${avg.map((x) => x.toFixed(2)).join('  ')}   (största skillnad ${(Math.max(...avg) - Math.min(...avg)).toFixed(2)})`);
 }
 
-console.log('\n5. Regelvarianter, räknade på samma kvällar. nu: fel syn kostar 1. golv: ställningen går aldrig under noll. utan: fel syn kostar inget');
+console.log('\n5. Regelvarianter, räknade på samma kvällar. nu: fel syn kostar inget. avdrag: fel syn kostar 1. golv: som avdrag, men ställningen går aldrig under noll');
 console.log('   lag  variant  något lag på minus  något lag på noll eller under  ledaren före sista ronden vinner  bästa laget vinner  skillnad etta–sist');
 for (const teams of [3, 4, 5, 6]) {
   for (const v of Object.keys(VARIANTS)) {

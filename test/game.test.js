@@ -13,9 +13,16 @@ test('poäng: klarat bud ger 1, djärvaste klarade budet 2 till, missat bud 0', 
   assert.deepEqual(miss.points, { a: 3, b: 0, c: 2, d: 0 });
 });
 
-test('poäng: fel syn kostar 1 som går till det synade laget', () => {
+test('poäng: fel syn ger det synade laget 1, och den som synade förlorar inget', () => {
   const r = scoreRound({ direction: 'high', bids: { a: 12, b: 14 }, results: { a: 13, b: 11 }, calls: { c: 'a' } });
-  assert.deepEqual(r.points, { a: 4, b: 0, c: -1 });
+  assert.deepEqual(r.points, { a: 4, b: 0, c: 0 });
+  // Inget utfall ger någon minuspoäng, inte heller med dubbla poäng och flera syner.
+  for (const results of [{ a: 13, b: 15 }, { a: 13, b: 11 }, { a: 1, b: 1 }]) {
+    for (const calls of [{ c: 'a', d: 'a' }, { c: 'a', d: 'b' }, { c: 'b', d: 'pass' }]) {
+      const { points } = scoreRound({ direction: 'high', bids: { a: 12, b: 14 }, results, calls, factor: 2 });
+      assert.ok(Object.values(points).every((p) => p >= 0), JSON.stringify({ results, calls, points }));
+    }
+  }
 });
 
 test('poäng: lika bud delar på bonusen, och ingen bonus om båda missar', () => {

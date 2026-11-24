@@ -25,10 +25,10 @@ Vissa uppdrag görs av båda lagen samtidigt. I andra turas lagen om: då går d
 - Klarat bud ger 1 poäng. Det djärvaste klarade budet i duellen ger 2 till. Missat bud ger 0.
 - Klarar båda lagen samma bud delar de på bonusen och får 2 poäng var.
 - När uppdraget mäts i tid och kortast tid är bäst är det lägsta budet djärvast. Ett lag som inte kommer i mål har missat sitt bud.
-- Syna betyder "ni klarar inte ert bud". Rätt syn ger 2 poäng. Fel syn kostar 1 poäng, som går till det synade laget. Högst en syn per lag och rond.
+- Syna betyder "ni klarar inte ert bud". Rätt syn ger 2 poäng. Vid fel syn får det synade laget 1 poäng. Den som synade förlorar inget. Högst en syn per lag och rond.
 - Resultat över budet ger inga poäng men skrivs i rekordboken. Rekord avgör vid lika poäng.
 - Sista varvet ger dubbla poäng när antalet lag är jämnt. Det gäller allt i ronden, även syn.
-- Poängen kan bli negativ.
+- Ingen ställning sjunker någonsin. Det finns inga avdrag.
 - Ställningen döljs under sista varvet och vinnaren avslöjas efter finalen.
 - Publiken satsar från egna mobiler, åt båda håll, på en egen poängtavla. Kontrollanten satsar inte.
 
