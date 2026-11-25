@@ -16,6 +16,8 @@ export function seeded(seed = 1) {
 // Ett rum med en mobil per lag, en kontrollant och en i publiken.
 export function setup(teamCount = 4, seed = 1) {
   const room = newRoom(teamCount);
+  // Testerna gäller ronderna som räknas. Övningsronden har egna tester, som slår på den.
+  room.settings.practice = false;
   const rng = seeded(seed);
   for (const t of room.teams) {
     addDevice(room, `tok-${t.id}`, `dev-${t.id}`);

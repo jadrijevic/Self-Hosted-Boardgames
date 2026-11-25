@@ -29,7 +29,7 @@ test('masstestet: 150 kvällar där allt krånglar, och inget är fel efteråt',
   assert.deepEqual(report.violations, {}, JSON.stringify(report.violations, null, 1).slice(0, 1500));
   assert.equal(report.finished, 150, 'varje kväll kom i mål');
   // Provet är bara värt något om det som ska krångla faktiskt har krånglat.
-  assert.ok(report.peeks > 50 && report.restarts > 50 && report.undone > 50 && report.finishers > 200, JSON.stringify(report));
+  assert.ok(report.peeks > 50 && report.restarts > 50 && report.undone > 50 && report.finishers > 200 && report.practice > 500, JSON.stringify(report));
   for (const step of ['intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end']) assert.ok(report.steps[step] > 0, step);
 });
 

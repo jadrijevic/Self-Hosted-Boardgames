@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { newRoom, addDevice, apply, viewFor, tick } from '../server/room.js';
 import { seeded } from './helpers.js';
 
-const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'setLong', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
+const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'setLong', 'setPractice', 'skipPractice', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
 const ODD = [undefined, null, 0, -1, 1, 2, 7, 1e9, -1e9, NaN, Infinity, 0.5, '', 'x', 'rod', 'bla', 'gron', 'gul', 'lila', 'rosa', 'pass', 'team', 'audience', 'judge', '__proto__', 'constructor', 'hasOwnProperty', 'toString', [], [1], {}, { a: 1 }, true, false, 'a'.repeat(5000), '<script>', 'dev-rod', 'dev-judge'];
 const KEYS = ['role', 'team', 'name', 'count', 'device', 'on', 'value', 'target', 'delta', 'success', 'kind', 'pin', 'token', 'c', '__proto__', 'constructor'];
 
@@ -30,6 +30,8 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
     const deep = game % 2 === 0;
     const types = deep ? TYPES.filter((t) => t !== 'reset' && t !== 'endGame') : TYPES;
     const room = newRoom(2 + Math.floor(rnd() * 5));
+    // Hälften av de djupa spelen går utan övningsrond, så att de hinner fram till slutet.
+    if (deep && game % 4 === 0) room.settings.practice = false;
     const tokens = [];
     for (const t of room.teams) {
       addDevice(room, `tok-${t.id}`, `dev-${t.id}`);
@@ -42,7 +44,8 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
     apply(room, 'tok-aud', { t: 'choose', role: 'audience' });
     tokens.push('tok-judge', 'tok-aud');
     let now = 1_000_000;
-    for (let i = 0; i < 500; i++) {
+    // De djupa spelen får fler drag: med övningsronden är vägen till slutet en rond längre.
+    for (let i = 0; i < (deep ? 800 : 500); i++) {
       const s = room.syna;
       const odd = { t: pick(types) };
       for (let k = 0; k < 3; k++) if (rnd() < 0.7) odd[pick(KEYS)] = pick(ODD);
@@ -53,7 +56,7 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
         { t: 'count', team: s?.schedule?.[s.round]?.[0], delta: 1 }, { t: 'stop', team: s?.schedule?.[s.round]?.[1] },
         // Ångrandet är sällsynt i de djupa spelen, så att de ändå hinner fram till finalen.
         ...(deep && rnd() < 0.8 ? [] : [{ t: 'undo' }, { t: 'undo', step: s?.step }]),
-        { t: 'finalResult', success: rnd() < 0.5 }, { t: 'bid', value: Math.floor(rnd() * 40) }, { t: 'setMaterial', on: rnd() < 0.5 }, { t: 'setLong', on: rnd() < 0.5 },
+        { t: 'finalResult', success: rnd() < 0.5 }, { t: 'bid', value: Math.floor(rnd() * 40) }, { t: 'setMaterial', on: rnd() < 0.5 }, { t: 'setLong', on: rnd() < 0.5 }, { t: 'setPractice', on: rnd() < 0.5 }, { t: 'skipPractice' },
       ]);
       const msg = wire(rnd() < 0.45 ? valid : rnd() < 0.05 ? pick(ODD) : odd);
       const isAdmin = rnd() < (deep ? 0.7 : 0.4);
@@ -71,12 +74,13 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
         for (const t of tokens) JSON.stringify(viewFor(room, t, 'player'));
       }, `vyerna efter ${where}`);
       steps.add(room.syna?.step ?? room.phase);
+      if (room.syna?.practice) steps.add('övning');
     }
   }
-  assert.equal(sent, games * 500);
+  assert.equal(sent, games * 650);
   assert.ok(undone > 50, `bara ${undone} steg ångrades`);
   // Provet är bara värt något om spelet faktiskt har rört sig genom alla steg.
-  for (const step of ['lobby', 'intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end']) {
+  for (const step of ['lobby', 'övning', 'intro', 'bid', 'call', 'ready', 'play', 'result', 'score', 'final', 'end']) {
     assert.ok(steps.has(step), `steget ${step} nåddes aldrig`);
   }
 });

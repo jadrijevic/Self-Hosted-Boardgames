@@ -13,7 +13,7 @@ const cases = [];
 function snap(g, name) {
   const { room, clock } = g;
   const s = room.syna;
-  const duel = s ? s.schedule[s.round] : [];
+  const duel = s ? s.practice?.duel ?? s.schedule[s.round] : [];
   const watcher = room.teams.map((t) => t.id).find((id) => !duel.includes(id));
   const phones = { publik: viewFor(room, 'tok-aud', 'player'), kontrollant: viewFor(room, 'tok-judge', 'player') };
   if (duel[0]) phones.tavlar = viewFor(room, `tok-${duel[0]}`, 'player');
@@ -102,6 +102,31 @@ for (const id of ['viskningen', 'alfabetet', 'tystnaden']) {
 }
 
 // 4. Lobbyn med sex lag och långa namn. Mobilerna finns men är inte anslutna, vilket ger den längsta statustexten.
+// Övningsronden med sex lag och långa namn: den har egna rubriker och en egen rad om poängen.
+{
+  const g = setup(6, 3);
+  g.room.settings.practice = true;
+  longNames(g);
+  g.admin({ t: 'start' });
+  const [a, b] = g.room.syna.practice.duel;
+  snap(g, 'övning-intro');
+  g.admin({ t: 'next' });
+  snap(g, 'övning-bid');
+  for (const [t, value] of [[a, 55], [b, 60]]) { g.as(t, { t: 'bid', value }); g.as(t, { t: 'lockBid' }); }
+  snap(g, 'övning-call');
+  for (const w of g.room.teams.map((t) => t.id).filter((id) => id !== a && id !== b)) g.as(w, { t: 'call', target: b });
+  snap(g, 'övning-ready');
+  g.as('judge', { t: 'next' });
+  snap(g, 'övning-play');
+  g.clock.add(58_000);
+  g.as('judge', { t: 'stop', team: b });
+  g.clock.add(1_000);
+  g.as('judge', { t: 'stop', team: a });
+  snap(g, 'övning-result');
+  g.as('judge', { t: 'next' });
+  snap(g, 'övning-score');
+}
+
 const lobby = setup(6, 5);
 longNames(lobby);
 

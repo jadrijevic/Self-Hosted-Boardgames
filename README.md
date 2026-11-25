@@ -19,6 +19,7 @@ Det här fungerar:
 - 18 uppdrag. 15 kräver inget material: fem var av sorterna kropp, röst och huvud. Svårigheten och budens spann är inte provade med människor.
 - Kontrollanten räknar godkända eller stoppar tiden från sin mobil.
 - Värden går vidare mellan stegen, kan byta uppdrag och kan lägga bud eller syna åt ett lag som saknar mobil.
+- Kvällen börjar med en övningsrond utan poäng och rekord, som lär ut bud och syn. Värden kan hoppa över den eller slå av den i lobbyn.
 - Värden kan ångra de senaste stegen och göra om ett försök. Kontrollanten kan börja om ett försök som startades av misstag.
 - Medan ett lags bud eller syn är hemligt kan dess mobiler inte byta lag. Under spelet kan ingen ny bli kontrollant så länge det finns en.
 - Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
@@ -133,7 +134,7 @@ Skärmlåset i mobilen kräver https. Det löses med en omvänd proxy framför c
 npm test
 ```
 
-Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 30 000 trasiga och giltiga meddelanden genom alla steg, med ångrade steg emellan, och kräver att spellogiken aldrig kastar ett undantag.
+Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 39 000 trasiga och giltiga meddelanden genom alla steg, övningsronden inräknad och med ångrade steg emellan, och kräver att spellogiken aldrig kastar ett undantag.
 
 Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart. CI kör också installationsskriptet mot riktig Docker och Compose, med ett wifi-lösenord fullt av specialtecken, och kräver att det kommer fram oförändrat till containern. Unraid och Compose Manager provas inte.
 
