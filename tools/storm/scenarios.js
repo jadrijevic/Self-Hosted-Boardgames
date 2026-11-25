@@ -144,6 +144,8 @@ export function runEvening(seed, report) {
     }
 
     // Poängen är summan av rondernas poäng.
+    // En rond som inte har nått poängen har inga poäng att räkna, också om den nått dit förut och sedan ångrats.
+    if (!['score', 'final', 'end'].includes(s.step)) delete ledger[s.round];
     // Övningsronden visar poäng men ger inga: den ska aldrig synas i ställningen.
     if (s.practice) report.practice = (report.practice ?? 0) + 1;
     else if (['score', 'final', 'end'].includes(s.step) && s.points) ledger[s.round] = { ...s.points };
@@ -208,7 +210,7 @@ export function runEvening(seed, report) {
     const s = room.syna;
     const d = pick(devices);
     const teams = room.teams.map((t) => t.id);
-    const kind = pick(['leave', 'switch', 'judge', 'rogue', 'spam', 'mistap', 'undo', 'kick', 'rename', 'lobbyOnly', 'restart', 'clock', 'newPhone', 'swap', 'skip']);
+    const kind = pick(['leave', 'switch', 'judge', 'rogue', 'spam', 'mistap', 'undo', 'kick', 'rename', 'lobbyOnly', 'restart', 'clock', 'newPhone', 'swap', 'skip', 'final']);
     report.trouble[kind] = (report.trouble[kind] ?? 0) + 1;
     if (kind === 'leave') { send(d.token, { t: 'leave' }); if (chance(0.7)) send(d.token, { t: 'choose', role: d.home ? 'team' : 'audience', team: d.home }); }
     else if (kind === 'switch') send(d.token, { t: 'choose', role: 'team', team: pick(teams) });
@@ -227,6 +229,11 @@ export function runEvening(seed, report) {
     else if (kind === 'clock') { now += pick([0, 1000, 44_000, 200_000]); try { tick(room, now); } catch (e) { fail('klockan kastade', e.message); } check(); }
     else if (kind === 'newPhone') join('team', pick(teams));
     else if (kind === 'swap') admin({ t: 'swapTask' });
+    else if (kind === 'final') {
+      // Värden går till finalen i förtid ibland. Någon annan som försöker ska alltid få nej.
+      if (chance(0.15)) { if (admin({ t: 'toFinal' }) === null) report.early += 1; }
+      else if (send(d.token, { t: 'toFinal' }) === null) fail('någon annan än värden gick till finalen', dev(d)?.role ?? 'utan plats');
+    }
     else if (kind === 'skip') { if (chance(0.3)) admin({ t: 'skipPractice' }); else send(d.token, { t: 'skipPractice' }); }
   }
 
@@ -290,18 +297,18 @@ export function runEvening(seed, report) {
 }
 
 export function runMany(evenings = 400, seed = 1) {
-  const report = { evenings, seed, sent: 0, finished: 0, rescued: 0, ended: 0, restarts: 0, undone: 0, peeks: 0, finishers: 0, steps: {}, trouble: {}, violations: {} };
+  const report = { evenings, seed, sent: 0, finished: 0, rescued: 0, ended: 0, restarts: 0, undone: 0, early: 0, peeks: 0, finishers: 0, steps: {}, trouble: {}, violations: {} };
   for (let i = 0; i < evenings; i++) runEvening(seed * 100_003 + i, report);
   return report;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const started = Date.now();
   const report = runMany(Number(process.argv[2]) || 400, Number(process.argv[3]) || 1);
   const kinds = Object.entries(report.violations).sort((a, b) => b[1].count - a[1].count);
   console.log(`${report.evenings} kvällar, ${report.sent} meddelanden, ${((Date.now() - started) / 1000).toFixed(1)} s`);
   console.log(`i mål av sig själva: ${report.finished} · i mål med värdens hjälp: ${report.rescued} · avslutade av någon: ${report.ended}`);
-  console.log(`omstarter: ${report.restarts} · ångrade steg: ${report.undone} · tjuvkikar: ${report.peeks} · prov av att värden kan ta det i mål: ${report.finishers}`);
+  console.log(`omstarter: ${report.restarts} · ångrade steg: ${report.undone} · till finalen i förtid: ${report.early} · tjuvkikar: ${report.peeks} · prov av att värden kan ta det i mål: ${report.finishers}`);
   console.log(`steg: ${STEPS.map((s) => `${s} ${report.steps[s] ?? 0}`).join(', ')}`);
   if (!kinds.length) console.log('Inga fel.');
   for (const [type, v] of kinds) {

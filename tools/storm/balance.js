@@ -6,6 +6,7 @@
 //   - Hur ofta är kvällen avgjord före sista ronden, slutar oavgjord eller ger ett lag minuspoäng?
 //   - Är schemat rättvist mellan lagen?
 //   - Hur lång blir kvällen?
+//   - Vad ändras om värden går till finalen i förtid?
 //
 // Lagens prestationer är antaganden, inte mätningar: ett lag presterar i snitt uppdragets startbud gånger
 // lagets förmåga, med en spridning på 25 %, och vet sin egen nivå på 15 % när. Resultaten visar hur reglerna
@@ -83,6 +84,7 @@ function evening(teams, profile, rnd) {
   let seconds = FINAL_SECONDS;
   let callPoints = 0;
   let decidedEarly = false;
+  const cuts = []; // ställning och längd om värden hade gått till finalen efter varje rond
   const totals = Object.fromEntries(Object.keys(VARIANTS).map((v) => [v, Object.fromEntries(ids.map((id) => [id, 0]))]));
   const leader = {}; // per variant: laget som leder ensamt när sista ronden börjar, annars null
   for (let guard = 0; guard < 400 && s.step !== 'end'; guard++) {
@@ -126,12 +128,14 @@ function evening(teams, profile, rnd) {
       for (const [v, rule] of Object.entries(VARIANTS)) {
         for (const [id, p] of Object.entries(variantPoints(rule, round))) totals[v][id] = rule.floor ? Math.max(0, totals[v][id] + p) : totals[v][id] + p;
       }
-    } else if (s.step === 'score') admin({ t: 'next' });
-    else if (s.step === 'final') admin({ t: 'finalResult', success: true });
+    } else if (s.step === 'score') {
+      cuts.push({ scores: { ...s.scores }, seconds });
+      admin({ t: 'next' });
+    } else if (s.step === 'final') admin({ t: 'finalResult', success: true });
   }
   const rows = viewFor(room, null, 'stage').syna.standings;
   if (ids.some((id) => totals.nu[id] !== s.scores[id])) throw new Error('varianten "nu" ska ge samma poäng som spelet');
-  return { rows, scores: s.scores, seconds, callPoints, decidedEarly, ids, skill, totals, leader };
+  return { rows, scores: s.scores, seconds, callPoints, decidedEarly, ids, skill, totals, leader, cuts, schedule: s.schedule };
 }
 
 function study(teams, profile, label, variant = 'nu') {
@@ -156,6 +160,18 @@ function study(teams, profile, label, variant = 'nu') {
     if (e.decidedEarly) out.early += 1;
     const best = e.ids.reduce((x, y) => (e.skill[x] >= e.skill[y] ? x : y));
     if (winners.includes(best)) out.bestWins += 1 / winners.length;
+    // Finalen i förtid: ledarna efter varje rond, jämförda med vinnarna efter hela kvällen. Finalen ger inga poäng,
+    // så ställningen efter rond k är slutställningen om värden går till finalen där.
+    out.schedule ??= e.schedule;
+    out.cuts ??= e.cuts.map(() => ({ same: 0, best: 0, ties: 0, minutes: 0 }));
+    e.cuts.forEach((c, k) => {
+      const top = Math.max(...Object.values(c.scores));
+      const lead = e.ids.filter((id) => c.scores[id] === top);
+      out.cuts[k].same += lead.filter((id) => winners.includes(id)).length / lead.length;
+      if (lead.includes(best)) out.cuts[k].best += 1 / lead.length;
+      if (lead.length > 1) out.cuts[k].ties += 1;
+      out.cuts[k].minutes += c.seconds / 60;
+    });
     out.minutes.push(e.seconds / 60);
     const sum = Object.values(e.scores).reduce((x, y) => x + Math.abs(y), 0);
     out.callShare += sum ? e.callPoints / sum : 0;
@@ -170,8 +186,10 @@ const same = (teams, bid = 'lagom', call = 'kalkyl') => Array.from({ length: tea
 console.log(`${N} kvällar per uppställning, genom den riktiga spellogiken.\n`);
 console.log('1. Kvällen i stort, när alla lag budar lagom och synar när det lönar sig');
 console.log('   lag  ronder  minuter (snitt, 90 % under)  oavgjort i topp  något lag på minus  avgjort före sista ronden  bästa laget vinner  poäng från syn  skillnad etta–sist');
+const overall = {};
 for (const teams of [2, 3, 4, 5, 6]) {
   const r = study(teams, same(teams), 'lika');
+  overall[teams] = r;
   const rounds = (() => { const room = newRoom(teams); room.settings.practice = false; apply(room, null, { t: 'start' }, true, 0, rng32(1)); return room.syna.schedule.length; })();
   const m = [...r.minutes].sort((x, y) => x - y);
   console.log(`   ${teams}    ${rounds}       ${(m.reduce((x, y) => x + y, 0) / N).toFixed(1)}, ${m[Math.floor(N * 0.9)].toFixed(1)}`.padEnd(46)
@@ -220,3 +238,15 @@ console.log('\n6. Längsta och kortaste rond, med antagandena om tid ovan');
 const times = TASKS.filter((t) => !t.material).map((t) => [t.name, roundSeconds(t, true) / 60]).sort((x, y) => y[1] - x[1]);
 console.log(`   längst: ${times.slice(0, 4).map(([n, m]) => `${n} ${m.toFixed(1)} min`).join(', ')}`);
 console.log(`   kortast: ${times.slice(-3).map(([n, m]) => `${n} ${m.toFixed(1)} min`).join(', ')}`);
+
+console.log('\n7. Värden går till finalen i förtid. Samma kvällar som i 1, brutna efter varje rond. Sista raden är hela kvällen');
+console.log('   lag  efter rond  alla lag lika många dueller  minuter (snitt)  oavgjort i topp  bästa laget leder  ledaren vinner också hela kvällen');
+for (const teams of [3, 4, 5, 6]) {
+  const r = overall[teams];
+  const count = {};
+  r.cuts.forEach((c, k) => {
+    for (const t of r.schedule[k]) count[t] = (count[t] ?? 0) + 1;
+    const even = Object.keys(count).length === teams && new Set(Object.values(count)).size === 1;
+    console.log(`   ${teams}    ${String(k + 1).padEnd(11)} ${(even ? 'ja' : 'nej').padEnd(28)} ${(c.minutes / N).toFixed(1).padEnd(16)} ${pct(c.ties / N).padEnd(16)} ${pct(c.best / N).padEnd(18)} ${pct(c.same / N)}`);
+  });
+}

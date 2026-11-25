@@ -74,6 +74,14 @@ Servern räknar ut vilka lag som möts så att alla får lika många dueller (`s
 - Under spelet kan ingen ny bli kontrollant så länge det finns en. Värden kan ta bort den som sitter.
 - En tid kan inte bli längre än uppdragets tid. Stoppas klockan efter att tiden gått ut räknas det som att tiden gick ut.
 
+## När tiden inte räcker
+
+- Värden kan gå till finalen i förtid. Resten av ronderna stryks.
+- En rond som pågår räknas inte. En rond som har fått sina poäng behåller dem, och rekorden som sattes står kvar.
+- Rättvist blir det när alla lag har tävlat lika många gånger. Värdsidan säger om det är så, och annars efter vilken rond det blir det. Med fem lag är det jämnt först efter sista ronden.
+- Stryks sista varvet blir det inget varv med dubbla poäng.
+- Ställningen är dold under finalen, som vanligt. Steget går att ångra.
+
 ## Uppdrag
 
 - Standardurvalet kräver inget material. Uppdrag med material är märkta och väljs aktivt.

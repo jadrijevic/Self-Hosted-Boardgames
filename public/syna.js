@@ -23,7 +23,7 @@ export function action(d) {
     case 'setResult': return { t: 'setResult', team: d.team, value: Number(d.v) };
     case 'finalResult': return { t: 'finalResult', success: d.ok === '1' };
     case 'setMaterial': case 'setLong': case 'setPractice': return { t: d.do, on: d.on === '1' };
-    case 'next': case 'swapTask': case 'skipPractice': case 'start': case 'endGame': return { t: d.do };
+    case 'next': case 'swapTask': case 'skipPractice': case 'toFinal': case 'start': case 'endGame': return { t: d.do };
     // Steget följer med, så att servern säger nej om läget har hunnit ändras.
     case 'undo': return { t: 'undo', step: d.step };
     default: return null;
@@ -308,6 +308,21 @@ const NEXT = {
   ready: 'Starta tiden', play: 'Avbryt tiden', result: 'Godkänn resultatet',
 };
 
+// Värdens nödutgång när tiden inte räcker. Servern säger om lagen har tävlat lika många gånger.
+function early(g, armed) {
+  const f = g.fair;
+  if (!f) return '';
+  const running = g.step !== 'score' && !g.practice;
+  const fair = f.played === 0
+    ? 'Ingen rond är räknad än, så alla lag slutar på noll.'
+    : f.even
+      ? 'Alla lag har tävlat lika många gånger.'
+      : `Lagen har inte tävlat lika många gånger än.${f.next ? ` Efter rond ${f.next} är det jämnt.` : ''}`;
+  return `<section class="card"><h2>Ont om tid?</h2>
+      <button class="btn ghost" data-do="toFinal" data-arm="1">${armed === 'toFinal' ? 'Säker? Tryck igen' : 'Gå till finalen nu'}</button>
+      <p class="muted">Resten av ronderna stryks. ${running ? 'Ronden som pågår räknas inte: gör klart den först om den ska räknas. ' : ''}${fair}</p></section>`;
+}
+
 export function admin(s, now, armed) {
   const g = s.syna;
   const task = g.task;
@@ -347,6 +362,7 @@ export function admin(s, now, armed) {
       <h2>Ställning${g.hidden ? ' (dold för alla andra)' : ''}</h2>
       ${scores.map((t) => `<div class="rowx" style="--c:${esc(t.color)}"><div class="dot"></div><div class="grow">Lag ${esc(t.name)}</div><b>${fmt(g.scores[t.id])}</b></div>`).join('')}
     </section>
+    ${early(g, armed)}
     <section class="card">
       <h2>Avsluta</h2>
       <button class="btn warn" data-do="endGame" data-arm="1">${armed === 'endGame' ? 'Säker? Tryck igen' : 'Avsluta spelet'}</button>

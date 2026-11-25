@@ -115,7 +115,7 @@ app.addEventListener('click', (e) => {
   error = '';
   const act = b.dataset.do;
   // Två tryck på samma knapp krävs för det som inte går att ta tillbaka. Ett tryck på något annat avbryter.
-  const twice = act === 'reset' || act === 'endGame' || (act === 'undo' && b.dataset.arm);
+  const twice = act === 'reset' || act === 'endGame' || act === 'toFinal' || (act === 'undo' && b.dataset.arm);
   const confirmed = twice && armed === act;
   armed = twice && !confirmed ? act : '';
   armedFor = stepOf(state);
