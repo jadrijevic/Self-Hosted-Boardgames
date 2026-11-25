@@ -132,6 +132,8 @@ jobs:
           ! grep -qF 'p#ss' "$UT" || fel "lösenordet skrivs ut av installationen"
           grep -q '  OK      wifi-koden till nätet Gäst nät' "$UT" || fel "kontrollen i containern såg ingen wifi-kod"
           grep -q '  OK      containern kör som 99:100' "$UT" || fel "containern kör inte som 99:100"
+          grep -q '  OK      händelseloggen skrivs' "$UT" || fel "händelseloggen skrivs inte i containern"
+          grep -q '  OK      händelseloggen går att läsa som text' "$UT" || fel "händelseloggen går inte att läsa i containern"
           har WIFI_SSID "$NAMN"
           har WIFI_PASSWORD "$LOSEN"
           har ADMIN_PIN 246810

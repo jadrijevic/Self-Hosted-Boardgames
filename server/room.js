@@ -162,6 +162,19 @@ export function viewFor(room, token, kind, online = new Set()) {
   return view;
 }
 
+// Händelseloggen (server/log.js). Nyckeln säger när det finns något nytt att skriva.
+export function logKey(room) {
+  return `${room.phase}|${room.phase === 'game' ? GAMES[room.game].logKey?.(room) ?? '' : ''}`;
+}
+
+// En rad till loggen: storbildens vy i korthet. Den går genom viewFor som allt annat en klient får se,
+// så att ett hemligt bud aldrig hamnar i loggen. Mobilernas namn och token följer inte med.
+export function logEntry(room) {
+  const view = viewFor(room, null, 'stage');
+  const game = view[room.game] && GAMES[room.game].logEntry ? GAMES[room.game].logEntry(view[room.game]) : {};
+  return { game: room.game, phase: room.phase, teams: Object.fromEntries(view.teams.map((t) => [t.id, t.name])), ...game };
+}
+
 // Enheter som varken har en roll eller är anslutna behöver inte sparas.
 export function prune(room, online = new Set()) {
   for (const [tok, d] of Object.entries(room.devices)) {

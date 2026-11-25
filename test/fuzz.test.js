@@ -2,7 +2,7 @@
 // ett sådant skulle annars bli ett serverfel mitt i en kväll.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newRoom, addDevice, apply, viewFor, tick } from '../server/room.js';
+import { newRoom, addDevice, apply, viewFor, tick, logKey, logEntry } from '../server/room.js';
 import { seeded } from './helpers.js';
 
 const TYPES = ['hello', 'ping', 'choose', 'leave', 'setTeamCount', 'renameTeam', 'kick', 'reset', 'setMaterial', 'setLong', 'setPractice', 'skipPractice', 'toFinal', 'start', 'bid', 'lockBid', 'call', 'count', 'stop', 'setResult', 'next', 'swapTask', 'undo', 'finalResult', 'endGame', 'okänd', undefined, null, 5, {}, '__proto__', 'constructor', 'toString'];
@@ -73,6 +73,7 @@ test('spellogiken kastar aldrig, vilka meddelanden som än kommer', () => {
         JSON.stringify(viewFor(room, null, 'admin'));
         for (const t of tokens) JSON.stringify(viewFor(room, t, 'player'));
       }, `vyerna efter ${where}`);
+      assert.doesNotThrow(() => { logKey(room); JSON.stringify(logEntry(room)); }, `händelseloggen efter ${where}`);
       steps.add(room.syna?.step ?? room.phase);
       if (room.syna?.practice) steps.add('övning');
     }

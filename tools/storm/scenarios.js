@@ -13,7 +13,8 @@
 // Skriver en sammanställning och avslutar med 1 om någon kontroll föll.
 
 import { pathToFileURL } from 'node:url';
-import { newRoom, addDevice, apply, viewFor, normalize, tick } from '../../server/room.js';
+import { newRoom, addDevice, apply, viewFor, normalize, tick, logKey, logEntry } from '../../server/room.js';
+import { summary } from '../../server/log.js';
 import { taskById } from '../../games/syna/tasks.js';
 import { stage as stageHtml, player as playerHtml, admin as adminHtml } from '../../public/syna.js';
 
@@ -95,7 +96,21 @@ export function runEvening(seed, report) {
       return 'kastade';
     }
     check();
+    note(msg?.t);
     return error;
+  };
+  // Händelseloggen förs som i servern: en rad när spelet har bytt steg.
+  const logged = [];
+  let logged0 = null;
+  const note = (by) => {
+    try {
+      const key = logKey(room);
+      if (key === logged0) return;
+      logged0 = key;
+      logged.push(JSON.stringify({ at: new Date(now).toISOString(), by, ...logEntry(room) }));
+    } catch (e) {
+      fail('händelseloggen kastade', e.message);
+    }
   };
   const admin = (msg) => send(null, msg, true);
   const dev = (d) => room.devices[d.token];
@@ -176,6 +191,18 @@ export function runEvening(seed, report) {
     }
     const stage = JSON.stringify(viewFor(room, null, 'stage'));
     if (stage.includes('"history"') || secrets.some((n) => stage.includes(n))) fail('en hemlighet når storbilden', '');
+
+    // Händelseloggen får aldrig veta mer än storbilden: inget hemligt bud, ingen hemlig syn, ingen dold ställning, ingen token.
+    try {
+      const entry = logEntry(room);
+      const line = JSON.stringify(entry);
+      if (['intro', 'bid'].includes(s.step) && Object.values(entry.bids).some((v) => v !== null)) fail('ett hemligt bud står i händelseloggen', line.slice(0, 200));
+      if (['intro', 'bid', 'call'].includes(s.step) && Object.values(entry.calls).some((c) => c && c !== 'hidden')) fail('en hemlig syn står i händelseloggen', line.slice(0, 200));
+      if ((s.round >= s.hideFrom || s.step === 'final') && s.step !== 'end' && entry.scores !== null) fail('en dold ställning står i händelseloggen', line.slice(0, 200));
+      if (line.includes('"history"') || secrets.some((n) => line.includes(n)) || devices.some((d) => line.includes(d.token))) fail('en hemlighet står i händelseloggen', line.slice(0, 200));
+    } catch (e) {
+      fail('händelseloggen kastade', e.message);
+    }
 
     if (s.step === 'end') {
       const rows = viewFor(room, null, 'stage').syna.standings;
@@ -289,6 +316,14 @@ export function runEvening(seed, report) {
       report.finishers += 1;
     }
   }
+  // Kvällens logg ska gå att sammanfatta, hur kvällen än gick.
+  try {
+    const text = summary(logged.join('\n'), now);
+    if (logged.length && !text.includes('Tid per steg')) fail('loggens sammanfattning saknar kvällen', text.slice(0, 200));
+    report.logged += logged.length;
+  } catch (e) {
+    fail('loggens sammanfattning kastade', e.message);
+  }
   if (room.phase === 'game' && room.syna.step === 'end') report.finished += 1;
   else if (room.phase === 'game') {
     if (hostFinishes(room, now, rnd) === null) fail('kvällen kom aldrig i mål', `rond ${room.syna.round}, steg ${room.syna.step}`);
@@ -297,7 +332,7 @@ export function runEvening(seed, report) {
 }
 
 export function runMany(evenings = 400, seed = 1) {
-  const report = { evenings, seed, sent: 0, finished: 0, rescued: 0, ended: 0, restarts: 0, undone: 0, early: 0, peeks: 0, finishers: 0, steps: {}, trouble: {}, violations: {} };
+  const report = { evenings, seed, sent: 0, finished: 0, rescued: 0, ended: 0, restarts: 0, undone: 0, early: 0, logged: 0, peeks: 0, finishers: 0, steps: {}, trouble: {}, violations: {} };
   for (let i = 0; i < evenings; i++) runEvening(seed * 100_003 + i, report);
   return report;
 }
@@ -308,7 +343,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const kinds = Object.entries(report.violations).sort((a, b) => b[1].count - a[1].count);
   console.log(`${report.evenings} kvällar, ${report.sent} meddelanden, ${((Date.now() - started) / 1000).toFixed(1)} s`);
   console.log(`i mål av sig själva: ${report.finished} · i mål med värdens hjälp: ${report.rescued} · avslutade av någon: ${report.ended}`);
-  console.log(`omstarter: ${report.restarts} · ångrade steg: ${report.undone} · till finalen i förtid: ${report.early} · tjuvkikar: ${report.peeks} · prov av att värden kan ta det i mål: ${report.finishers}`);
+  console.log(`omstarter: ${report.restarts} · ångrade steg: ${report.undone} · till finalen i förtid: ${report.early} · rader i händelseloggen: ${report.logged} · tjuvkikar: ${report.peeks} · prov av att värden kan ta det i mål: ${report.finishers}`);
   console.log(`steg: ${STEPS.map((s) => `${s} ${report.steps[s] ?? 0}`).join(', ')}`);
   if (!kinds.length) console.log('Inga fel.');
   for (const [type, v] of kinds) {

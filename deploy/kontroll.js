@@ -79,6 +79,10 @@ try {
   fel(`läget sparas inte i ${dataDir} (${e.code ?? e.message})`);
 }
 
+// Händelseloggen ligger bredvid läget, och servern skriver en rad i den när den startar.
+await page('/logg.jsonl', '"by":"serverStart"', 'händelseloggen skrivs');
+await page('/logg', 'Händelselogg', 'händelseloggen går att läsa som text');
+
 try {
   const lage = JSON.parse((await get('/lage')).body);
   ok(`läge: ${lage.phase === 'game' ? 'spel pågår' : 'lobby'}, ${lage.online} anslutna`);

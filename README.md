@@ -22,6 +22,7 @@ Det här fungerar:
 - Kvällen börjar med en övningsrond utan poäng och rekord, som lär ut bud och syn. Värden kan hoppa över den eller slå av den i lobbyn.
 - Värden kan ångra de senaste stegen och göra om ett försök. Kontrollanten kan börja om ett försök som startades av misstag.
 - Räcker inte tiden går värden till finalen i förtid. Spelade ronder räknas, och värdsidan säger om lagen har tävlat lika många gånger.
+- Servern för en händelselogg: en rad per steg med tid, uppdrag, bud, syn och resultat. `/logg` visar den som text, med tid per steg och bud mot resultat för varje kväll.
 - Medan ett lags bud eller syn är hemligt kan dess mobiler inte byta lag. Under spelet kan ingen ny bli kontrollant så länge det finns en.
 - Dubbla poäng och dold ställning i sista varvet, gemensam final och slutresultat.
 - Rekordboken: bästa resultat per uppdrag sparas mellan kvällarna.
@@ -64,6 +65,8 @@ Startsidan `/start` är den enda adressen att minnas. På Unraid öppnas den ock
 3. Lagen skannar koden på storbilden och väljer lag. En person väljer kontrollant.
 4. Värden trycker Starta spelet.
 
+Efter kvällen, eller efter ett provspel, finns händelseloggen på `/logg`, med en länk från startsidan. Den visar hur lång tid varje steg tog, vad lagen budade och vad de klarade. Texten går att markera och klistra in där den ska läsas.
+
 Pinkoden skrivs in en gång per webbläsare och ligger sedan kvar där. Den står i projektets `.env` på servern, och startsidan visar kommandot som läser ut den. Storbilden har länkar till startsidan och värdsidan i lobbyn.
 
 ## Storbilden
@@ -91,6 +94,7 @@ Skriptet visar vad det ska göra och frågar innan något ändras. En ny körnin
 - **Projektet** är Compose Manager-projektet `boardgames` i `/boot/config/plugins/compose.manager/projects/boardgames/`, med värdena i `.env` (0600).
 - **Containern** kör som 99:100 med skrivskyddat filsystem, på nätet `docker_network` och port 8090 mot LAN. Välj en annan port med `PORT=<nr>` framför `bash`.
 - **Läget** ligger i `/mnt/system_apps/appdata/boardgames/data/room.json`: kvällens spel och rekordboken.
+- **Händelseloggen** ligger bredvid, i `events.jsonl`. En kväll ger ungefär 60 rader. Har filen vuxit över 5 MB läggs den undan som `events.1.jsonl` när servern startar.
 - **Värdens pinkod** slumpas vid första installationen, står i `.env` och skrivs ut när skriptet är klart. Välj en egen med `PIN=<4–8 siffror>` framför `bash`.
 - **Wifi-koden** bär gästnätets namn och lösenord. Skriptet frågar efter dem första gången, och lösenordet syns inte när det skrivs. Byt nät senare med `WIFI_NAMN=<nätets namn>` framför `bash`, och ta bort koden med `WIFI=av`. Nätet ska ha WPA2 eller WPA2/WPA3 och ett synligt namn. Enkla citattecken och bakstreck går inte att använda i namn eller lösenord.
 - **Startsidan** `http://<serverns adress>:8090/start` länkar till storbilden och värdsidan. Länken WebUI på containern i Docker-fliken öppnar samma sida.
@@ -123,6 +127,8 @@ Containern startar om av sig själv högst tre gånger efter en krasch (`restart
 
 `/halsa` svarar `ok` när servern är uppe. `/lage` visar fas, antal anslutna och tid sedan senaste ändring, utan hemligheter.
 
+`/logg` visar händelseloggen som text och `/logg.jsonl` raderna som de är. Loggen byggs ur storbildens vy: ett bud står där först när det har visats för alla, och mobilernas namn och token skrivs aldrig dit. Klockslagen visas i tidszonen `TZ`, annars svensk tid. Går filen inte att skriva sägs det en gång i containerns logg, och spelet går vidare.
+
 Wifi-koden (`/wifi.svg`) är gästnätets lösenord i klartext. Den som når servern direkt är redan på nätet hemma och får den. Ett anrop som kommer genom en omvänd proxy, och därför bär rubriker som `X-Forwarded-For`, får den inte. Görs spelet nåbart utifrån genom en sådan proxy följer lösenordet alltså inte med. En port som öppnas rakt mot internet i routern skyddas inte av detta.
 
 Ett kort nätnamn och lösenord ger en grövre kod som går att skanna på längre håll. Upp till 26 tecken tillsammans ger 29 rutor per sida, 27–48 tecken ger 33 och 49–70 ger 37. Spelets kod har 25.
@@ -135,7 +141,7 @@ Skärmlåset i mobilen kräver https. Det löses med en omvänd proxy framför c
 npm test
 ```
 
-Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 39 000 trasiga och giltiga meddelanden genom alla steg, övningsronden inräknad och med ångrade steg emellan, och kräver att spellogiken aldrig kastar ett undantag.
+Testerna täcker spelläget, schemaläggaren, spelmotorn för Syna (poäng, hemliga bud, en hel kväll), vad mobilen och värden ser i varje steg och prov med riktiga WebSocket-klienter mot en riktig server. Varje uppdrag kontrolleras för sig: budets gränser, tiden i texten och att ämnen och kontrollantens lappar når rätt skärmar. Ett slumpprov skickar 39 000 trasiga och giltiga meddelanden genom alla steg, övningsronden inräknad och med ångrade steg emellan, och kräver att spellogiken aldrig kastar ett undantag. Händelseloggen provas för sig: att en rad skrivs per steg, att inget hemligt står i den, att sammanfattningen räknar tiderna rätt också efter ett ångrande, och att servern fortsätter i samma fil efter en omstart.
 
 Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker som startar den riktiga servern. Docker och Unraid själva provas inte där. Avbilden byggs och provas som i drift av CI på varje pull request: 99:100, skrivskyddat filsystem, sidorna, WebSocket, läget på disk och att ett startat spel finns kvar efter en omstart. CI kör också installationsskriptet mot riktig Docker och Compose, med ett wifi-lösenord fullt av specialtecken, och kräver att det kommer fram oförändrat till containern. Unraid och Compose Manager provas inte.
 
@@ -143,7 +149,7 @@ Installations- och uppdateringsskripten körs i testerna mot en låtsas-docker s
 
 Tre skript i `tools/storm/` provar spelet hårdare än testerna, från var sitt håll. `npm run storm` kör alla tre.
 
-- `scenarios.js` spelar tusentals kvällar genom spellogiken där allt krånglar: lag som inte svarar, mobiler som lämnar och byter lag, någon som tjuvkikar på motståndarens bud, en obehörig kontrollant, en värd som trycker fel och ångrar eller går till finalen i förtid, omstarter mitt i ett steg och klockor som hoppar. Efter varje meddelande kontrolleras att hemligheter är hemliga, att ställningen är summan av rondernas poäng, att det sparade läget går att läsa tillbaka och att värden ensam kan ta kvällen i mål.
+- `scenarios.js` spelar tusentals kvällar genom spellogiken där allt krånglar: lag som inte svarar, mobiler som lämnar och byter lag, någon som tjuvkikar på motståndarens bud, en obehörig kontrollant, en värd som trycker fel och ångrar eller går till finalen i förtid, omstarter mitt i ett steg och klockor som hoppar. Efter varje meddelande kontrolleras att hemligheter är hemliga, också i händelseloggen, att ställningen är summan av rondernas poäng, att det sparade läget går att läsa tillbaka och att värden ensam kan ta kvällen i mål.
 - `load.js` stormar en riktig server: tusentals hämtningar, 500 anslutningar på en gång, en flod av meddelanden, trasiga och för stora meddelanden, gissning av pinkoden, en hel kväll medan andra bråkar, och servern dödad femton gånger mitt i spelet.
 - `balance.js` spelar kvällar med lag som budar och synar på olika sätt och visar om något sätt att spela vinner för lätt, hur ofta kvällen är avgjord i förväg, om schemat är rättvist, hur lång kvällen blir och vad som ändras om värden går till finalen i förtid. Lagens prestationer där är antaganden, inte mätningar.
 

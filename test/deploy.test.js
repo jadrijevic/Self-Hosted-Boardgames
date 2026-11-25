@@ -418,14 +418,15 @@ test('kontrollen godkänner en fungerande server och underkänner en som inte sv
   };
   const good = await kontroll({ PORT: String(app.port), DATA_DIR: dataDir, ADMIN_PIN: '1234' });
   assert.equal(good.code, 0, good.out);
-  assert.equal(count(good.out, '  OK      '), 11);
+  assert.equal(count(good.out, '  OK      '), 13);
+  assert.match(good.out, /  OK      händelseloggen skrivs\n  OK      händelseloggen går att läsa som text/);
   assert.match(good.out, /  \.\.      ingen wifi-kod är inställd \(WIFI_SSID\)/);
   assert.doesNotMatch(good.out, /FEL|VARNING/);
 
   // Med ett gästnät inställt provas wifi-koden också. Är det inställt i .env men inte hos servern är något fel.
   const wifi = await kontroll({ PORT: String(withWifi.port), DATA_DIR: wifiDir, ADMIN_PIN: '1234', WIFI_SSID: 'Syna-gast' });
   assert.equal(wifi.code, 0, wifi.out);
-  assert.equal(count(wifi.out, '  OK      '), 12);
+  assert.equal(count(wifi.out, '  OK      '), 14);
   assert.match(wifi.out, /  OK      wifi-koden till nätet Syna-gast/);
   const lost = await kontroll({ PORT: String(app.port), DATA_DIR: dataDir, ADMIN_PIN: '1234', WIFI_SSID: 'Syna-gast' });
   assert.equal(lost.code, 1);

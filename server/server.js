@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { newRoom, addDevice, apply, viewFor, prune, isValidRoom, normalize, tick } from './room.js';
 import { wifiPayload } from './wifi.js';
+import { createLog, summary } from './log.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC = path.join(ROOT, 'public');
@@ -61,6 +62,8 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   const file = path.join(dataDir, 'room.json');
   const pin = adminPin ? String(adminPin) : String(randomInt(1000, 10000));
   const room = load(file);
+  const log = createLog(dataDir);
+  await log.boot(room);
   const conns = new Map(); // ws -> { token, kind, isAdmin }
   let saveTimer = null;
   let castTimer = null;
@@ -91,9 +94,15 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
 
   // Varje ändring höjer versionen, går ut till alla och sparas strax efteråt. Ändringar som kommer tätt slås ihop,
   // så att en mobil som skickar hundratals meddelanden i sekunden inte får servern att skicka lika många svar till alla.
-  function changed() {
+  // by är meddelandet som ledde till ändringen. Händelseloggen skriver en rad när spelet har bytt steg.
+  function changed(by = '') {
     room.v += 1;
     lastChange = Date.now();
+    try {
+      log.note(room, by, lastChange);
+    } catch (e) {
+      console.error('Fel i händelseloggen:', e); // loggen får aldrig stoppa spelet
+    }
     if (!castTimer) castTimer = setTimeout(cast, CAST_MS);
     if (!saveTimer) saveTimer = setTimeout(save, 150);
   }
@@ -140,6 +149,12 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
       if (pathname === '/lage') {
         const body = { phase: room.phase, online: conns.size, idleSec: Math.floor((Date.now() - lastChange) / 1000), v: room.v };
         return reply(res, 200, 'application/json; charset=utf-8', JSON.stringify(body));
+      }
+      // Händelseloggen som text att läsa eller klistra in, och raderna som de är. Båda innehåller bara det storbilden har visat.
+      if (pathname === '/logg' || pathname === '/logg.jsonl') {
+        const text = await log.raw();
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(pathname === '/logg' ? summary(text) : text);
       }
       if (pathname === '/adress') return reply(res, 200, 'text/plain; charset=utf-8', joinUrl(req));
       if (pathname === '/qr.svg') {
@@ -229,7 +244,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
         return send(ws, { t: 'error', error: 'serverfel, försök igen' });
       }
       if (err) return send(ws, { t: 'error', error: err });
-      changed();
+      changed(String(m.t).slice(0, 30));
     }
   });
 
@@ -245,7 +260,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
   // Spelets klocka: när tiden för ett uppdrag har gått ut går servern själv vidare.
   const clock = setInterval(() => {
     try {
-      if (logic.tick(room, Date.now())) changed();
+      if (logic.tick(room, Date.now())) changed('tick');
     } catch (e) {
       console.error('Fel i spelets klocka:', e);
     }
@@ -267,6 +282,7 @@ export async function startServer({ port = 8080, dataDir = './data', adminPin, p
       for (const ws of wss.clients) ws.terminate();
       conns.clear();
       await save();
+      await log.flush();
       await new Promise((resolve) => wss.close(() => server.close(resolve)));
     },
   };
